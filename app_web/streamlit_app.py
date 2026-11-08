@@ -285,6 +285,12 @@ a.br:hover .bl{text-decoration:underline}
 .vb{background:#4C8BF5;border-radius:3px 3px 0 0}
 .vb.vm{background:rgba(128,128,128,.45)}
 .vx{position:absolute;top:calc(100% + 4px);left:-20px;right:-20px;text-align:center;font-size:.68rem;opacity:.62;white-space:nowrap}
+.gt{height:420px;overflow:auto;border:1px solid rgba(128,128,128,.3);border-radius:8px}
+.gt table{border-collapse:collapse;width:100%;font-size:.74rem;font-variant-numeric:tabular-nums}
+.gt th{position:sticky;top:0;background:var(--background-color, #0e1117);text-align:left;font-weight:600;padding:6px 8px;border-bottom:1px solid rgba(128,128,128,.35);white-space:nowrap;opacity:.9}
+.gt td{padding:5px 8px;border-bottom:1px solid rgba(128,128,128,.18);white-space:nowrap}
+.gt td:first-child{white-space:normal}
+.gt .n{text-align:right}
 @media (max-width: 900px){.bc-grid{grid-template-columns:minmax(0,1fr) !important}}
 </style>
 """
@@ -541,13 +547,15 @@ with a:
                "is the sum of all states – switch to US states for state detail.")
 with b:
     tbl = agg.sort_values("fy2026_obligations", ascending=False)[
-        ["name", "key", "fy2026_obligations", "share_of_selected_dataset_pct", "supplier_count", "actions"]]
-    st.dataframe(tbl, hide_index=True, use_container_width=True, height=420,
-                 column_config={"name": "Location", "key": "Code",
-                                "fy2026_obligations": st.column_config.NumberColumn("Obligations", format="$%,.0f"),
-                                "share_of_selected_dataset_pct": st.column_config.NumberColumn("Share", format="%.2f%%"),
-                                "supplier_count": st.column_config.NumberColumn("Companies", format="%,d"),
-                                "actions": st.column_config.NumberColumn("Actions", format="%,d")})
+        ["name", "key", "fy2026_obligations", "share_of_selected_dataset_pct", "companies_txt", "actions"]]
+    trs = "".join(
+        f"<tr><td>{_e(r['name'])}</td><td>{_e(r['key'])}</td><td class='n'>{_e(compact(r['fy2026_obligations']))}</td>"
+        f"<td class='n'>{_e(pct(r['share_of_selected_dataset_pct'], 2))}</td>"
+        f"<td class='n'>{_e(r['companies_txt'])}</td>"
+        f"<td class='n'>{int(fnum(r['actions'])):,}</td></tr>" for _, r in tbl.iterrows())
+    (st.html if hasattr(st, "html") else (lambda h: st.markdown(h, unsafe_allow_html=True)))(
+        '<div class="gt"><table><thead><tr><th>Location</th><th>Code</th><th class="n">Obligations</th>'
+        f'<th class="n">Share</th><th class="n">Companies</th><th class="n">Actions</th></tr></thead><tbody>{trs}</tbody></table></div>')
 
 if ss.loc:
     country, state = ss.loc
