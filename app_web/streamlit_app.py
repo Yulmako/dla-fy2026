@@ -425,10 +425,10 @@ sup_tip = lambda r: [f"{compact(r['fy2026_obligations'])} · {pct(r.get('share_o
 normal = str(stt.get("reporting_normal_through") or "")[:7]
 mon = T("monthly", market, counting, "month")
 size = T("award_size", market, counting)
-top15 = T("companies", market, counting, "rank", 15)
+top15 = T("companies", market, counting, "rank", 10)
 cards = [
-    hcard("Top 15 companies", "Obligations by company (reported parent UEI); click a bar for the profile.",
-          hrows(top15, "company_name", 15, key="company_id",
+    hcard("Top 10 companies", "Obligations by company (reported parent UEI); click a bar for the profile.",
+          hrows(top15, "company_name", 10, key="company_id",
                 link=lambda r: href(company=int(r["company_id"]), go="profile"),
                 tip=lambda r: [f"Obligations {compact(r['fy2026_obligations'])}", f"Share {pct(r['share_of_selected_dataset_pct'])}",
                                f"{int(r['award_count']):,} awards · click for profile"]), "top", clickable=True, share=0.52),
@@ -486,20 +486,35 @@ geo = T("by_geo", market, counting, extra="AND basis = ?", params=(basis,))
 import numpy as np  # noqa: E402
 
 MAP_SCALE = [[0, "#d6e4fd"], [0.5, "#6fa1f7"], [1, "#1f4fbf"]]
+GEO_NAMES = json.loads('{"world":{"ABW":"Aruba","AFG":"Afghanistan","AGO":"Angola","AIA":"Anguilla","ALA":"Åland Islands","ALB":"Albania","AND":"Andorra","ARE":"United Arab Emirates","ARG":"Argentina","ARM":"Armenia","ASM":"American Samoa","ATA":"Antarctica","ATF":"Fr. S. Antarctic Lands","ATG":"Antigua and Barbuda","AUS":"Australia","AUT":"Austria","AZE":"Azerbaijan","BDI":"Burundi","BEL":"Belgium","BEN":"Benin","BES":"Bonaire, Sint Eustatius and Saba","BFA":"Burkina Faso","BGD":"Bangladesh","BGR":"Bulgaria","BHR":"Bahrain","BHS":"Bahamas","BIH":"Bosnia and Herz.","BLM":"Saint Barthélemy","BLR":"Belarus","BLZ":"Belize","BMU":"Bermuda","BOL":"Bolivia","BRA":"Brazil","BRB":"Barbados","BRN":"Brunei","BTN":"Bhutan","BVT":"Bouvet Island","BWA":"Botswana","CAF":"Central African Rep.","CAN":"Canada","CCK":"Cocos (Keeling) Islands","CHE":"Switzerland","CHL":"Chile","CHN":"China","CIV":"Côte d\'Ivoire","CMR":"Cameroon","COD":"Dem. Rep. Congo","COG":"Congo","COK":"Cook Islands","COL":"Colombia","COM":"Comoros","CPV":"Cabo Verde","CRI":"Costa Rica","CUB":"Cuba","CUW":"Curaçao","CXR":"Christmas Island","CYM":"Cayman Islands","CYP":"Cyprus","CZE":"Czechia","DEU":"Germany","DJI":"Djibouti","DMA":"Dominica","DNK":"Denmark","DOM":"Dominican Rep.","DZA":"Algeria","ECU":"Ecuador","EGY":"Egypt","ERI":"Eritrea","ESH":"W. Sahara","ESP":"Spain","EST":"Estonia","ETH":"Ethiopia","FIN":"Finland","FJI":"Fiji","FLK":"Falkland Is.","FRA":"France","FRO":"Faroe Islands","FSM":"Micronesia, Federated States of","GAB":"Gabon","GBR":"United Kingdom","GEO":"Georgia","GGY":"Guernsey","GHA":"Ghana","GIB":"Gibraltar","GIN":"Guinea","GLP":"Guadeloupe","GMB":"Gambia","GNB":"Guinea-Bissau","GNQ":"Eq. Guinea","GRC":"Greece","GRD":"Grenada","GRL":"Greenland","GTM":"Guatemala","GUF":"French Guiana","GUM":"Guam","GUY":"Guyana","HKG":"Hong Kong","HMD":"Heard Island and McDonald Islands","HND":"Honduras","HRV":"Croatia","HTI":"Haiti","HUN":"Hungary","IDN":"Indonesia","IMN":"Isle of Man","IND":"India","IOT":"British Indian Ocean Territory","IRL":"Ireland","IRN":"Iran","IRQ":"Iraq","ISL":"Iceland","ISR":"Israel","ITA":"Italy","JAM":"Jamaica","JEY":"Jersey","JOR":"Jordan","JPN":"Japan","KAZ":"Kazakhstan","KEN":"Kenya","KGZ":"Kyrgyzstan","KHM":"Cambodia","KIR":"Kiribati","KNA":"Saint Kitts and Nevis","KOR":"South Korea","KWT":"Kuwait","LAO":"Laos","LBN":"Lebanon","LBR":"Liberia","LBY":"Libya","LCA":"Saint Lucia","LIE":"Liechtenstein","LKA":"Sri Lanka","LSO":"Lesotho","LTU":"Lithuania","LUX":"Luxembourg","LVA":"Latvia","MAC":"Macao","MAF":"Saint Martin (French part)","MAR":"Morocco","MCO":"Monaco","MDA":"Moldova","MDG":"Madagascar","MDV":"Maldives","MEX":"Mexico","MHL":"Marshall Islands","MKD":"Macedonia","MLI":"Mali","MLT":"Malta","MMR":"Myanmar","MNE":"Montenegro","MNG":"Mongolia","MNP":"Northern Mariana Islands","MOZ":"Mozambique","MRT":"Mauritania","MSR":"Montserrat","MTQ":"Martinique","MUS":"Mauritius","MWI":"Malawi","MYS":"Malaysia","MYT":"Mayotte","NAM":"Namibia","NCL":"New Caledonia","NER":"Niger","NFK":"Norfolk Island","NGA":"Nigeria","NIC":"Nicaragua","NIU":"Niue","NLD":"Netherlands","NOR":"Norway","NPL":"Nepal","NRU":"Nauru","NZL":"New Zealand","OMN":"Oman","PAK":"Pakistan","PAN":"Panama","PCN":"Pitcairn","PER":"Peru","PHL":"Philippines","PLW":"Palau","PNG":"Papua New Guinea","POL":"Poland","PRI":"Puerto Rico","PRK":"North Korea","PRT":"Portugal","PRY":"Paraguay","PSE":"Palestine","PYF":"French Polynesia","QAT":"Qatar","REU":"Réunion","ROU":"Romania","RUS":"Russia","RWA":"Rwanda","SAU":"Saudi Arabia","SDN":"Sudan","SEN":"Senegal","SGP":"Singapore","SGS":"South Georgia and the South Sandwich Islands","SHN":"Saint Helena, Ascension and Tristan da Cunha","SJM":"Svalbard and Jan Mayen","SLB":"Solomon Is.","SLE":"Sierra Leone","SLV":"El Salvador","SMR":"San Marino","SOM":"Somalia","SPM":"Saint Pierre and Miquelon","SRB":"Serbia","SSD":"S. Sudan","STP":"Sao Tome and Principe","SUR":"Suriname","SVK":"Slovakia","SVN":"Slovenia","SWE":"Sweden","SWZ":"eSwatini","SXM":"Sint Maarten (Dutch part)","SYC":"Seychelles","SYR":"Syria","TCA":"Turks and Caicos Islands","TCD":"Chad","TGO":"Togo","THA":"Thailand","TJK":"Tajikistan","TKL":"Tokelau","TKM":"Turkmenistan","TLS":"Timor-Leste","TON":"Tonga","TTO":"Trinidad and Tobago","TUN":"Tunisia","TUR":"Turkey","TUV":"Tuvalu","TWN":"Taiwan","TZA":"Tanzania","UGA":"Uganda","UKR":"Ukraine","UMI":"United States Minor Outlying Islands","URY":"Uruguay","USA":"United States of America","UZB":"Uzbekistan","VAT":"Holy See (Vatican City State)","VCT":"Saint Vincent and the Grenadines","VEN":"Venezuela","VGB":"Virgin Islands, British","VIR":"Virgin Islands, U.S.","VNM":"Vietnam","VUT":"Vanuatu","WLF":"Wallis and Futuna","WSM":"Samoa","YEM":"Yemen","ZAF":"South Africa","ZMB":"Zambia","ZWE":"Zimbabwe","N/A-N. Cyprus":"N. Cyprus","N/A-Somaliland":"Somaliland","N/A-Kosovo":"Kosovo"},"us":{"AL":"Alabama","AK":"Alaska","AZ":"Arizona","CO":"Colorado","FL":"Florida","GA":"Georgia","IN":"Indiana","KS":"Kansas","ME":"Maine","MA":"Massachusetts","MN":"Minnesota","NJ":"New Jersey","NC":"North Carolina","ND":"North Dakota","OK":"Oklahoma","PA":"Pennsylvania","SD":"South Dakota","TX":"Texas","WY":"Wyoming","CT":"Connecticut","MO":"Missouri","WV":"West Virginia","IL":"Illinois","NM":"New Mexico","AR":"Arkansas","CA":"California","DE":"Delaware","DC":"District of Columbia","HI":"Hawaii","IA":"Iowa","KY":"Kentucky","MD":"Maryland","MI":"Michigan","MS":"Mississippi","MT":"Montana","NH":"New Hampshire","NY":"New York","OH":"Ohio","OR":"Oregon","TN":"Tennessee","UT":"Utah","VA":"Virginia","WA":"Washington","WI":"Wisconsin","AS":"American Samoa","GU":"Guam","NE":"Nebraska","SC":"South Carolina","PR":"Puerto Rico","ID":"Idaho","NV":"Nevada","VT":"Vermont","LA":"Louisiana","RI":"Rhode Island","VI":"U.S. Virgin Islands","MP":"Northern Mariana Islands"}}')
+num_cols = ["fy2026_obligations", "share_of_selected_dataset_pct", "actions"]
 if scope == "World":
-    agg = geo.groupby("country", as_index=False)[["fy2026_obligations", "actions"]].sum().rename(columns={"country": "key"})
+    other = geo[geo["country"] != "USA"].groupby("country", as_index=False).agg(
+        **{c: (c, "sum") for c in num_cols}, supplier_count=("supplier_count", "max"))
+    usa = geo[geo["country"] == "USA"]
+    if len(usa):
+        other = pd.concat([other, pd.DataFrame([{"country": "USA", **{c: usa[c].sum() for c in num_cols},
+                                                 "supplier_count": None}])], ignore_index=True)
+    agg = other.rename(columns={"country": "key"})
+    agg["name"] = [GEO_NAMES["world"].get(c, c) for c in agg["key"]]
     loc_kw = dict(locations="key")
 else:
     us = geo[geo["country"] == "USA"].copy()
     us["key"] = us["location"].astype(str).str.slice(0, 2)
-    agg = us.groupby("key", as_index=False)[["fy2026_obligations", "actions"]].sum()
+    agg = us.groupby("key", as_index=False).agg(**{c: (c, "sum") for c in num_cols},
+                                                 supplier_count=("supplier_count", "max"))
+    agg["name"] = [GEO_NAMES["us"].get(c, c) for c in agg["key"]]
     loc_kw = dict(locations="key", locationmode="USA-states")
-agg = agg[agg["fy2026_obligations"] > 0]
+agg = agg[agg["fy2026_obligations"] > 0].copy()
+agg["supplier_count"] = pd.to_numeric(agg["supplier_count"], errors="coerce")
+agg["companies_txt"] = [("—" if pd.isna(v) else f"{int(v):,}") for v in agg["supplier_count"]]
 # log colour: the US is ~100x larger than any other country, a linear scale hides the rest
 agg["shade"] = np.log10(agg["fy2026_obligations"].clip(lower=1))
+agg["obl_txt"] = [compact(v) for v in agg["fy2026_obligations"]]
 fig = px.choropleth(agg, color="shade", color_continuous_scale=MAP_SCALE,
-                    custom_data=["fy2026_obligations"], **loc_kw)
-fig.update_traces(hovertemplate="%{location}<br>$%{customdata[0]:,.0f}<extra></extra>",
+                    custom_data=["name", "obl_txt", "share_of_selected_dataset_pct", "companies_txt", "actions"], **loc_kw)
+fig.update_traces(hovertemplate=("<b>%{customdata[0]}</b><br>%{customdata[1]} · %{customdata[2]:.2f}%"
+                                 "<br>%{customdata[3]} companies · %{customdata[4]:,} actions<extra></extra>"),
                   marker_line_color="rgba(128,128,128,0.6)", marker_line_width=0.4)
 geo_kw = dict(bgcolor="rgba(0,0,0,0)", showframe=False, showcoastlines=False,
               showland=True, landcolor="rgba(128,128,128,0.22)",
@@ -521,12 +536,17 @@ with a:
     if v:
         ss.loc = ("USA", v) if scope == "US states" else (v, None)
         st.rerun()
-    st.caption("Click a country or state to filter. Scroll to zoom.")
+    st.caption("Click a country or state to filter. Scroll to zoom. In the world map the United States "
+               "is the sum of all states – switch to US states for state detail.")
 with b:
-    agg = agg.sort_values("fy2026_obligations", ascending=False)
-    st.dataframe(agg[["key", "fy2026_obligations"]], hide_index=True, use_container_width=True, height=420,
-                 column_config={"key": "Location",
-                                "fy2026_obligations": st.column_config.NumberColumn("Obligations", format="$%,.0f")})
+    tbl = agg.sort_values("fy2026_obligations", ascending=False)[
+        ["name", "key", "fy2026_obligations", "share_of_selected_dataset_pct", "supplier_count", "actions"]]
+    st.dataframe(tbl, hide_index=True, use_container_width=True, height=420,
+                 column_config={"name": "Location", "key": "Code",
+                                "fy2026_obligations": st.column_config.NumberColumn("Obligations", format="$%,.0f"),
+                                "share_of_selected_dataset_pct": st.column_config.NumberColumn("Share", format="%.2f%%"),
+                                "supplier_count": st.column_config.NumberColumn("Companies", format="%,d"),
+                                "actions": st.column_config.NumberColumn("Actions", format="%,d")})
 
 if ss.loc:
     country, state = ss.loc
