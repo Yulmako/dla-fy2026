@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from src.webapp import queries as Q  # noqa: E402
 
-st.set_page_config(page_title="FY2026 DLA competitor intelligence", layout="wide")
+st.set_page_config(page_title="FY2026 DLA competitor intelligence", layout="wide",
+                   initial_sidebar_state="collapsed")
 COUNTINGS = {"probable_duplicates_removed": "Probable duplicates removed",
              "usaspending_basis": "All records (USAspending basis)"}
 SOURCE = ("Source: [USAspending.gov](https://www.usaspending.gov) public contract transactions, "
@@ -92,184 +93,309 @@ def money(x) -> str:
     return f"${x:,.0f}"
 
 
-def hbar(df: pd.DataFrame, label: str, title: str, n: int = 15):
+ACCENT = "#4C8BF5"
+CSS = """
+<style>
+[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"] {display:none}
+.block-container {max-width: 1280px; padding-top: 2.2rem; padding-bottom: 3rem}
+h1 {font-size: 1.7rem !important; margin-bottom: 0 !important}
+h3 {font-size: 1.05rem !important; margin-top: 1.4rem !important}
+.src {font-size: .85rem; opacity: .75; margin: .2rem 0 1rem}
+.tiles {display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:.6rem; margin:.4rem 0 1rem}
+.tile {border:1px solid rgba(128,128,128,.3); border-radius:8px; padding:.6rem .75rem; cursor:help}
+.tile .l {font-size:.75rem; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.tile .v {font-size:1.35rem; font-weight:600; line-height:1.3}
+.tile .s {font-size:.75rem; opacity:.7}
+@media (max-width: 900px) {.tiles {grid-template-columns: repeat(2, minmax(0,1fr))}}
+.chip {display:inline-block; font-size:.8rem; padding:.1rem .55rem; border-radius:12px;
+       border:1px solid rgba(128,128,128,.4); margin-right:.4rem}
+</style>
+"""
+
+
+def tiles(items):
+    html = "".join(f'<div class="tile" title="{tip}"><div class="l">{lab}</div><div class="v">{val}</div>'
+                   f'<div class="s">{sub or "&nbsp;"}</div></div>' for lab, val, sub, tip in items)
+    st.markdown(f'<div class="tiles">{html}</div>', unsafe_allow_html=True)
+
+
+def picked(key: str, value):
+    """Apply a chart/table click only when it changes (so clearing a filter sticks)."""
+    if value is None:
+        return None
+    if st.session_state.get(f"_last_{key}") == value:
+        return None
+    st.session_state[f"_last_{key}"] = value
+    return value
+
+
+def points(ev) -> list:
+    try:
+        return list(ev.get("selection", {}).get("points", [])) if ev else []
+    except Exception:
+        return []
+
+
+def hbar(df: pd.DataFrame, label: str, title: str, n: int = 15, key: str | None = None,
+         custom: str | None = None):
+    st.markdown(f"**{title}**")
     if df.empty:
-        st.caption(f"{title}: no data")
-        return
-    d = df.nlargest(n, "fy2026_obligations").iloc[::-1]
-    fig = px.bar(d, x="fy2026_obligations", y=label, orientation="h", title=title,
+        st.caption("No data")
+        return None
+    d = df.nlargest(n, "fy2026_obligations").iloc[::-1].copy()
+    d[label] = d[label].fillna("—").astype(str).str.slice(0, 48)
+    fig = px.bar(d, x="fy2026_obligations", y=label, orientation="h",
+                 custom_data=[custom] if custom else None,
                  labels={"fy2026_obligations": "FY2026 obligations ($)", label: ""})
-    fig.update_layout(height=max(260, 22 * len(d) + 80), margin=dict(l=0, r=10, t=40, b=0),
-                      font=dict(size=11))
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_traces(marker_color=ACCENT, hovertemplate="%{y}<br>$%{x:,.0f}<extra></extra>")
+    fig.update_layout(height=max(200, 19 * len(d) + 60), margin=dict(l=0, r=10, t=4, b=0),
+                      font=dict(size=10), xaxis_title=None, dragmode=False)
+    if key:
+        ev = st.plotly_chart(fig, use_container_width=True, key=key, on_select="rerun",
+                             selection_mode="points", config={"displayModeBar": False})
+        pts = points(ev)
+        if pts:
+            cd = pts[0].get("customdata")
+            return cd[0] if isinstance(cd, (list, tuple)) and cd else pts[0].get("y")
+        return None
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    return None
 
 
-# ---------------- sidebar ----------------
+# ---------------- header & controls ----------------
+st.markdown(CSS, unsafe_allow_html=True)
+ss = st.session_state
+for k_, v_ in (("office", None), ("loc", None), ("company", None)):
+    ss.setdefault(k_, v_)
+
 mk = markets()
 names = dict(zip(mk["market"], mk["market_name"]))
-st.sidebar.title("FY2026 DLA")
-market = st.sidebar.selectbox("Market (official PSC group)", list(mk["market"]),
-                              format_func=lambda m: names.get(m, m))
-counting = st.sidebar.radio("Counting", list(COUNTINGS), format_func=COUNTINGS.get)
-st.sidebar.caption(SOURCE)
+st.title("FY2026 DLA competitor intelligence")
+st.markdown(f'<div class="src">{SOURCE.replace("[USAspending.gov](https://www.usaspending.gov)", "<a href=\'https://www.usaspending.gov\' target=\'_blank\'>USAspending.gov</a>")}</div>',
+            unsafe_allow_html=True)
+c1, c2, _ = st.columns([3, 2, 3])
+market = c1.selectbox("Market", list(mk["market"]), format_func=lambda m: names.get(m, m))
+counting = c2.selectbox("Counting", list(COUNTINGS), format_func=COUNTINGS.get)
+if ss.get("_market") != (market, counting):
+    ss["_market"] = (market, counting)
+    ss.office = ss.loc = ss.company = None
 
 k = Q.kpis(con, market, counting)
 stt = Q.status(con, market, counting)
-st.title("FY2026 DLA competitor intelligence")
-st.caption(SOURCE)
-if stt.get("period_label"):
-    st.caption(f"Data period: {stt['period_label']}")
+if stt.get("period_label") and "partial" in str(stt.get("market_status", "")):
+    st.warning(f"Partial year: {stt['period_label']}")
 
-tabs = st.tabs(["Overview", "Ranking", "Company profile", "Geography", "Orders search"])
+tiles([
+    ("Obligations", money(k.get("fy2026_obligations")), "",
+     "Sum of FY2026 federal action obligations. Not company revenue or profit."),
+    ("Awards with activity", f"{int(k.get('award_count') or 0):,}", "",
+     "Distinct contract awards with at least one FY2026 action."),
+    ("New awards in FY2026", f"{int(k.get('new_award_count') or 0):,}", money(k.get("new_award_obligations")),
+     "Base actions (modification 0) dated in FY2026, and their obligations."),
+    ("Modifications", f"{int(k.get('modification_count') or 0):,}", money(k.get("modification_obligations")),
+     "Actions that change existing awards (modification other than 0), and their obligations."),
+    ("Companies", f"{int(k.get('company_count') or 0):,}", "",
+     "Companies grouped by parent UEI where reported, otherwise recipient UEI."),
+    ("Top-10 concentration", f"{float(k.get('cr10_pct') or 0):.1f}%", "",
+     "Share of obligations received by the 10 largest companies."),
+])
 
 # ---------------- overview ----------------
-with tabs[0]:
-    c = st.columns(6)
-    c[0].metric("Obligations", money(k.get("fy2026_obligations")),
-                help="Sum of FY2026 federal action obligations – not revenue.")
-    c[1].metric("Awards with activity", f"{int(k.get('award_count') or 0):,}",
-                help="Distinct contract awards with at least one FY2026 action.")
-    c[2].metric("New awards in FY2026", f"{int(k.get('new_award_count') or 0):,}",
-                money(k.get("new_award_obligations")), delta_color="off",
-                help="Base actions (modification 0) dated in FY2026.")
-    c[3].metric("Modifications", f"{int(k.get('modification_count') or 0):,}",
-                money(k.get("modification_obligations")), delta_color="off",
-                help="Actions changing existing awards (modification ≠ 0).")
-    c[4].metric("Companies", f"{int(k.get('company_count') or 0):,}",
-                help="Companies grouped by parent UEI where reported, else recipient UEI.")
-    c[5].metric("Top-10 concentration", f"{float(k.get('cr10_pct') or 0):.1f}%",
-                help="Share of obligations received by the 10 largest companies.")
-    a, b = st.columns(2)
-    with a:
-        hbar(T("companies", market, counting, "rank", 15), "company_name", "Top 15 companies")
-        hbar(T("by_psc", market, counting), "psc_description", "PSC (product / service)")
-        hbar(T("by_office", market, counting), "office_name", "DLA contracting offices")
-    with b:
-        m = T("monthly", market, counting, "month")
-        if len(m):
-            fig = px.bar(m, x="month", y="fy2026_obligations", title="Obligations by month",
-                         labels={"fy2026_obligations": "$", "month": ""})
-            fig.update_layout(height=340, margin=dict(l=0, r=10, t=40, b=0))
-            st.plotly_chart(fig, use_container_width=True)
-        hbar(T("by_naics", market, counting), "naics_description", "NAICS (industry)")
-        s = T("award_size", market, counting)
-        if len(s):
-            fig = px.bar(s, x="bucket", y="awards", title="Award size (net FY2026 obligations)",
-                         labels={"bucket": "", "awards": "Awards"})
-            fig.update_layout(height=320, margin=dict(l=0, r=10, t=40, b=0))
-            st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- ranking ----------------
 companies = T("companies", market, counting, "rank")
-with tabs[1]:
-    cols = [c for c in ("rank", "company_name", "company_uei", "fy2026_obligations",
-                        "share_of_selected_dataset_pct", "award_count", "median_positive_award_fy2026")
-            if c in companies]
-    st.dataframe(companies[cols], hide_index=True, use_container_width=True, height=600,
-                 column_config={"fy2026_obligations": st.column_config.NumberColumn("Obligations", format="$%,.0f"),
-                                "share_of_selected_dataset_pct": st.column_config.NumberColumn("Share %", format="%.2f"),
-                                "rank": "#", "company_name": "Company", "company_uei": "UEI",
-                                "award_count": "Awards", "median_positive_award_fy2026": st.column_config.NumberColumn("Median award", format="$%,.0f")})
+a, b = st.columns(2)
+with a:
+    hbar(T("companies", market, counting, "rank", 15), "company_name", "Top 15 companies")
+with b:
+    st.markdown("**Obligations by month**")
+    m = T("monthly", market, counting, "month")
+    if len(m):
+        fig = px.bar(m, x="month", y="fy2026_obligations", labels={"fy2026_obligations": "", "month": ""})
+        fig.update_traces(marker_color=ACCENT, hovertemplate="%{x}<br>$%{y:,.0f}<extra></extra>")
+        fig.update_layout(height=345, margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+a, b = st.columns(2)
+with a:
+    hbar(T("by_psc", market, counting), "psc_description", "PSC (product / service)")
+with b:
+    hbar(T("by_naics", market, counting), "naics_description", "NAICS (industry)")
+a, b = st.columns(2)
+with a:
+    v = picked("office", hbar(T("by_office", market, counting), "office_name",
+                              "DLA contracting offices (click to filter)", key="office_chart", custom="office_code"))
+    if v:
+        ss.office = v
+with b:
+    st.markdown("**Award size (net FY2026 obligations)**")
+    s_ = T("award_size", market, counting)
+    if len(s_):
+        fig = px.bar(s_, x="bucket", y="awards", labels={"bucket": "", "awards": "Awards"})
+        fig.update_traces(marker_color=ACCENT)
+        fig.update_layout(height=300, margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-# ---------------- profile ----------------
-with tabs[2]:
-    if companies.empty:
-        st.info("No companies in this market.")
-    else:
-        opts = companies.head(500)
-        cid = st.selectbox("Company (top 500 by obligations)", list(opts["company_id"]),
-                           format_func=lambda i: f"#{int(opts.loc[opts.company_id == i, 'rank'].iloc[0])} "
-                                                 f"{opts.loc[opts.company_id == i, 'company_name'].iloc[0]}")
-        row = opts[opts["company_id"] == cid].iloc[0]
-        c = st.columns(4)
-        c[0].metric("Obligations", money(row["fy2026_obligations"]))
-        c[1].metric("Share of market", f"{row['share_of_selected_dataset_pct']:.2f}%")
-        c[2].metric("Awards", f"{int(row['award_count']):,}")
-        c[3].metric("Rank", f"#{int(row['rank'])}")
-        a, b, d = st.columns(3)
-        extra, p = "AND company_id = ?", (int(cid),)
-        with a:
-            hbar(T("company_offices", market, counting, extra=extra, params=p), "office_name", "DLA contracting offices", 10)
-        with b:
-            hbar(T("company_psc", market, counting, extra=extra, params=p), "psc_description", "PSC", 10)
-        with d:
-            hbar(T("company_naics", market, counting, extra=extra, params=p), "naics_description", "NAICS", 10)
-        rows, tot = search(market, counting, "", int(cid), None, None, "place_of_performance", 50)
-        st.subheader(f"Largest orders ({tot['n']:,} actions, {money(tot['total'])})")
-        st.dataframe(rows[["transaction_date", "transaction_amount", "piid", "psc_code", "description",
-                           "office_code", "pop_state_code", "pop_country_code"]],
-                     hide_index=True, use_container_width=True)
-        if T("company_offices", market, counting, extra=extra, params=p).empty:
-            st.caption("Detailed breakdowns are kept for the largest companies of each market only.")
+if ss.office:
+    offs_all = T("by_office", market, counting)
+    oname = offs_all.loc[offs_all.office_code == ss.office, "office_name"]
+    on = f"{ss.office} {oname.iloc[0] if len(oname) else ''}"
+    h, x = st.columns([6, 1])
+    h.markdown(f"### Office: {on}")
+    if x.button("✕ Clear office", key="clr_office_top"):
+        ss.office = None
+        st.rerun()
+    a, b = st.columns(2)
+    p_ = (ss.office,)
+    with a:
+        hbar(T("office_companies", market, counting, extra="AND office_code = ?", params=p_),
+             "company_name", "Top companies in this office", 10)
+    with b:
+        hbar(T("office_psc", market, counting, extra="AND office_code = ?", params=p_),
+             "psc_description", "PSC in this office", 10)
 
 # ---------------- geography ----------------
-with tabs[3]:
-    g1, g2 = st.columns(2)
-    scope = g1.radio("Map", ["World", "US states"], horizontal=True)
-    basis = g2.radio("Basis", ["place_of_performance", "recipient_location"], horizontal=True,
-                     format_func=lambda b: "Place of performance" if b == "place_of_performance" else "Recipient location")
-    geo = T("by_geo", market, counting, extra="AND basis = ?", params=(basis,))
-    if scope == "World":
-        agg = geo.groupby("country", as_index=False)[["fy2026_obligations", "actions"]].sum()
-        fig = px.choropleth(agg, locations="country", color="fy2026_obligations",
-                            color_continuous_scale="Blues", labels={"fy2026_obligations": "$"})
-        keys = agg.rename(columns={"country": "key"})
-    else:
-        us = geo[geo["country"] == "USA"].copy()
-        us["state"] = us["location"].astype(str).str.slice(0, 2)
-        agg = us.groupby("state", as_index=False)[["fy2026_obligations", "actions"]].sum()
-        fig = px.choropleth(agg, locations="state", locationmode="USA-states", scope="usa",
-                            color="fy2026_obligations", color_continuous_scale="Blues",
-                            labels={"fy2026_obligations": "$"})
-        keys = agg.rename(columns={"state": "key"})
-    fig.update_layout(height=460, margin=dict(l=0, r=0, t=10, b=0))
-    a, b = st.columns([3, 2])
-    a.plotly_chart(fig, use_container_width=True)
-    keys = keys.sort_values("fy2026_obligations", ascending=False)
-    b.dataframe(keys, hide_index=True, use_container_width=True, height=460,
-                column_config={"key": "Location", "fy2026_obligations": st.column_config.NumberColumn("Obligations", format="$%,.0f")})
-    pick = st.selectbox("Location details", ["—"] + list(keys["key"]))
-    if pick != "—":
-        if scope == "World":
-            ex, pp = "AND basis = ? AND country = ?", (basis, pick)
-        else:
-            ex, pp = "AND basis = ? AND country = 'USA' AND substr(location, 1, 2) = ?", (basis, pick)
-        a, b = st.columns(2)
-        with a:
-            gc = T("geo_companies", market, counting, extra=ex, params=pp)
-            hbar(gc.groupby("company_name", as_index=False)["fy2026_obligations"].sum(), "company_name", f"Top companies – {pick}", 10)
-        with b:
-            gp = T("geo_psc", Q.BASE if ":" not in market else market, counting, extra=ex, params=pp)
-            if len(gp):
-                hbar(gp.groupby("psc_description", as_index=False)["fy2026_obligations"].sum(), "psc_description", f"PSC – {pick}", 10)
+st.markdown("### Geography")
+g1, g2, _ = st.columns([2, 2, 4])
+scope = g1.selectbox("Map", ["World", "US states"])
+basis = g2.selectbox("Basis", ["place_of_performance", "recipient_location"],
+                     format_func=lambda b_: "Place of performance" if b_ == "place_of_performance" else "Recipient location")
+geo = T("by_geo", market, counting, extra="AND basis = ?", params=(basis,))
+if scope == "World":
+    agg = geo.groupby("country", as_index=False)[["fy2026_obligations", "actions"]].sum().rename(columns={"country": "key"})
+    fig = px.choropleth(agg, locations="key", color="fy2026_obligations", color_continuous_scale="Blues")
+else:
+    us = geo[geo["country"] == "USA"].copy()
+    us["key"] = us["location"].astype(str).str.slice(0, 2)
+    agg = us.groupby("key", as_index=False)[["fy2026_obligations", "actions"]].sum()
+    fig = px.choropleth(agg, locations="key", locationmode="USA-states", scope="usa",
+                        color="fy2026_obligations", color_continuous_scale="Blues")
+fig.update_traces(hovertemplate="%{location}<br>$%{z:,.0f}<extra></extra>")
+fig.update_layout(height=420, margin=dict(l=0, r=0, t=0, b=0), coloraxis_showscale=False,
+                  geo=dict(bgcolor="rgba(0,0,0,0)", showframe=False, showcoastlines=False))
+a, b = st.columns([3, 2])
+with a:
+    ev = st.plotly_chart(fig, use_container_width=True, key=f"map_{scope}", on_select="rerun",
+                         selection_mode="points", config={"displayModeBar": False, "scrollZoom": True})
+    pts = points(ev)
+    v = picked(f"map_{scope}", pts[0].get("location") if pts else None)
+    if v:
+        ss.loc = ("USA", v) if scope == "US states" else (v, None)
+    st.caption("Click a country or state to filter. Scroll to zoom.")
+with b:
+    agg = agg.sort_values("fy2026_obligations", ascending=False)
+    st.dataframe(agg[["key", "fy2026_obligations"]], hide_index=True, use_container_width=True, height=420,
+                 column_config={"key": "Location",
+                                "fy2026_obligations": st.column_config.NumberColumn("Obligations", format="$%,.0f")})
 
-# ---------------- orders ----------------
-with tabs[4]:
-    st.caption("Searches every FY2026 DLA contract action (word prefixes, all words must match) in the "
-               "description, company name, PIID and PSC code. Totals cover all matches.")
-    f1, f2, f3, f4 = st.columns([3, 2, 2, 2])
-    text = f1.text_input("Search", placeholder="e.g. valve, seal, SPE4A6…")
-    comp_opts = companies.head(1000)
-    comp = f2.selectbox("Company", [None] + list(comp_opts["company_id"]),
-                        format_func=lambda i: "All" if i is None else comp_opts.loc[comp_opts.company_id == i, "company_name"].iloc[0])
-    offs = T("by_office", market, counting, "fy2026_obligations DESC")
-    office = f3.selectbox("DLA office", [None] + list(offs["office_code"]),
-                          format_func=lambda o: "All" if o is None else f"{o} {offs.loc[offs.office_code == o, 'office_name'].iloc[0] or ''}")
-    geo_all = T("by_geo", market, counting, extra="AND basis = 'place_of_performance'")
-    ctry = sorted(set(geo_all["country"].dropna()))
-    country = f4.selectbox("Place of performance", [None] + ctry, format_func=lambda c: "All" if c is None else c)
-    loc = None
-    if country == "USA":
-        states = sorted(set(geo_all.loc[geo_all.country == "USA", "location"].astype(str).str.slice(0, 2)))
-        state = st.selectbox("State", [None] + states, format_func=lambda s: "All US" if s is None else s)
-        loc = ("USA", state)
-    elif country:
-        loc = (country, None)
-    rows, tot = search(market, counting, text, comp, office, loc, "place_of_performance", 500)
-    st.subheader(f"{tot['n']:,} actions · {money(tot['total'])}")
-    st.dataframe(rows.drop(columns=["excluded_as_copy"], errors="ignore"), hide_index=True,
-                 use_container_width=True, height=560,
-                 column_config={"transaction_amount": st.column_config.NumberColumn("Amount", format="$%,.2f")})
-    st.download_button("Download shown rows (CSV)", rows.to_csv(index=False).encode(), "orders.csv", "text/csv")
-    if tot["n"] > len(rows):
-        st.caption(f"Showing the {len(rows):,} largest of {tot['n']:,} matches – narrow the search to see more.")
+if ss.loc:
+    country, state = ss.loc
+    name = f"{state}, USA" if state else country
+    h, x = st.columns([6, 1])
+    h.markdown(f"### Location: {name}")
+    if x.button("✕ Clear location", key="clr_loc_top"):
+        ss.loc = None
+        st.rerun()
+    if state:
+        ex, pp = "AND basis = ? AND country = 'USA' AND substr(location, 1, 2) = ?", (basis, state)
+    else:
+        ex, pp = "AND basis = ? AND country = ?", (basis, country)
+    a, b = st.columns(2)
+    with a:
+        gc = T("geo_companies", market, counting, extra=ex, params=pp)
+        hbar(gc.groupby("company_name", as_index=False)["fy2026_obligations"].sum(), "company_name",
+             "Top companies here", 10)
+    with b:
+        gp = T("geo_psc", market, counting, extra=ex, params=pp)
+        if len(gp):
+            hbar(gp.groupby("psc_description", as_index=False)["fy2026_obligations"].sum(),
+                 "psc_description", "PSC here", 10)
+
+# ---------------- ranking ----------------
+st.markdown("### Company ranking")
+st.caption("Click a row to open the company profile below.")
+cols = [c for c in ("rank", "company_name", "company_uei", "fy2026_obligations",
+                    "share_of_selected_dataset_pct", "award_count", "median_positive_award_fy2026")
+        if c in companies]
+ev = st.dataframe(companies[cols], hide_index=True, use_container_width=True, height=420,
+                  on_select="rerun", selection_mode="single-row", key="ranking",
+                  column_config={"rank": "#", "company_name": "Company", "company_uei": "UEI",
+                                 "fy2026_obligations": st.column_config.NumberColumn("Obligations", format="$%,.0f"),
+                                 "share_of_selected_dataset_pct": st.column_config.NumberColumn("Share", format="%.2f%%"),
+                                 "award_count": "Awards",
+                                 "median_positive_award_fy2026": st.column_config.NumberColumn("Median award", format="$%,.0f")})
+try:
+    rows_sel = list(ev.get("selection", {}).get("rows", [])) if ev else []
+except Exception:
+    rows_sel = []
+v = picked("ranking", int(companies.iloc[rows_sel[0]]["company_id"]) if rows_sel else None)
+if v is not None:
+    ss.company = v
+
+# ---------------- profile ----------------
+st.markdown("### Company profile")
+if companies.empty:
+    st.info("No companies in this market.")
+else:
+    opts = companies.head(500)
+    ids = list(opts["company_id"])
+    if ss.company not in ids:
+        ss.company = ids[0]
+    cname = dict(zip(opts["company_id"], opts["company_name"]))
+    crank = dict(zip(opts["company_id"], opts["rank"]))
+    cid = st.selectbox("Company", ids, key="company", format_func=lambda i: f"#{int(crank[i])} {cname[i]}",
+                       label_visibility="collapsed")
+    row = opts[opts["company_id"] == cid].iloc[0]
+    tiles([("Obligations", money(row["fy2026_obligations"]), "", "FY2026 obligations to this company in the selected market."),
+           ("Share of market", f"{row['share_of_selected_dataset_pct']:.2f}%", "", "Share of the selected market's obligations."),
+           ("Awards", f"{int(row['award_count']):,}", "", "Distinct awards with FY2026 activity."),
+           ("Rank", f"#{int(row['rank'])}", "", "Rank by obligations in the selected market.")])
+    extra, p_ = "AND company_id = ?", (int(cid),)
+    co = T("company_offices", market, counting, extra=extra, params=p_)
+    a, b, d = st.columns(3)
+    with a:
+        hbar(co, "office_name", "DLA contracting offices", 10)
+    with b:
+        hbar(T("company_psc", market, counting, extra=extra, params=p_), "psc_description", "PSC", 10)
+    with d:
+        hbar(T("company_naics", market, counting, extra=extra, params=p_), "naics_description", "NAICS", 10)
+    if co.empty:
+        st.caption("Detailed breakdowns are kept for the largest companies of each market only.")
+    rows, tot = search(market, counting, "", int(cid), None, None, "place_of_performance", 25)
+    st.markdown(f"**Largest orders** · {tot['n']:,} actions · {money(tot['total'])}")
+    st.dataframe(rows[["transaction_date", "transaction_amount", "piid", "psc_code", "description",
+                       "office_code", "pop_state_code", "pop_country_code"]],
+                 hide_index=True, use_container_width=True,
+                 column_config={"transaction_date": "Date", "piid": "PIID", "psc_code": "PSC",
+                                "description": "Description", "office_code": "Office",
+                                "pop_state_code": "State", "pop_country_code": "Country",
+                                "transaction_amount": st.column_config.NumberColumn("Amount", format="$%,.2f")})
+
+# ---------------- orders search ----------------
+st.markdown("### Orders search")
+st.caption("Every FY2026 DLA contract action of the selected market. All words must match "
+           "(description, company, PIID, PSC). Totals cover all matches.")
+f1, f2 = st.columns([3, 2])
+text = f1.text_input("Search", placeholder="e.g. valve, seal, SPE4A6…", label_visibility="collapsed")
+only_company = f2.checkbox("Only the company shown in the profile", value=False)
+chips = []
+if ss.office:
+    chips.append(("office", f"Office: {ss.office}"))
+if ss.loc:
+    chips.append(("loc", "Location: " + (f"{ss.loc[1]}, USA" if ss.loc[1] else ss.loc[0])))
+if only_company and ss.company is not None:
+    chips.append(("company_chip", f"Company: {companies.loc[companies.company_id == ss.company, 'company_name'].iloc[0]}"))
+if chips:
+    cc = st.columns(len(chips) + 3)
+    for i_, (key_, lab_) in enumerate(chips):
+        if key_ != "company_chip" and cc[i_].button(f"✕ {lab_}", key=f"chip_{key_}"):
+            ss[key_] = None
+            st.rerun()
+        elif key_ == "company_chip":
+            cc[i_].markdown(f'<span class="chip">{lab_}</span>', unsafe_allow_html=True)
+rows, tot = search(market, counting, text, ss.company if only_company else None, ss.office,
+                   ss.loc, basis, 500)
+st.markdown(f"**{tot['n']:,} actions · {money(tot['total'])}**")
+st.dataframe(rows.drop(columns=["excluded_as_copy", "company_id", "potential_duplicate", "psc_group"], errors="ignore"),
+             hide_index=True, use_container_width=True, height=520,
+             column_config={"transaction_amount": st.column_config.NumberColumn("Amount", format="$%,.2f")})
+st.download_button("Download shown rows (CSV)", rows.to_csv(index=False).encode(), "orders.csv", "text/csv")
+if tot["n"] > len(rows):
+    st.caption(f"Showing the {len(rows):,} largest of {tot['n']:,} matches – narrow the search to see more.")
