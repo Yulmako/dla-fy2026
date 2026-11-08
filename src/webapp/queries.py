@@ -88,3 +88,19 @@ def search_orders(con, market: str, counting: str, text: str = "", company_id: A
     tot = q(con, f"SELECT COUNT(*) AS n, COALESCE(SUM(o.transaction_amount), 0) AS total FROM {src} WHERE {w}", params)
     rows = q(con, f"SELECT o.* FROM {src} WHERE {w} ORDER BY ABS(o.transaction_amount) DESC LIMIT {int(limit)}", params)
     return rows, {"n": int(tot["n"].iloc[0]), "total": float(tot["total"].iloc[0])}
+
+
+def country_companies(con, market: str, counting: str, country: str = "USA",
+                      basis: str = "place_of_performance") -> int:
+    """Distinct companies with actions in one country (the per-location tables only have per-state
+    counts, which cannot be added up: one company often works in several states)."""
+    col = "recipient_country" if basis == "recipient_location" else "pop_country_code"
+    where, params = [f"o.{col} = ?"], [country]
+    group = market.split(":", 1)[1] if ":" in market else None
+    clause, p = psc_group_clause(group)
+    if clause:
+        where.append(clause[5:]); params += p
+    if counting == "probable_duplicates_removed":
+        where.append("o.excluded_as_copy = 0")
+    d = q(con, f"SELECT COUNT(DISTINCT o.company_id) AS n FROM orders_all o WHERE {' AND '.join(where)}", params)
+    return int(d["n"].iloc[0])
