@@ -136,6 +136,11 @@ def points(ev) -> list:
         return []
 
 
+def chart_h(n: int = 15) -> int:
+    """Same height for every chart of a row, whatever the number of bars."""
+    return 19 * n + 60
+
+
 def hbar(df: pd.DataFrame, label: str, title: str, n: int = 15, key: str | None = None,
          custom: str | None = None):
     st.markdown(f"**{title}**")
@@ -148,7 +153,7 @@ def hbar(df: pd.DataFrame, label: str, title: str, n: int = 15, key: str | None 
                  custom_data=[custom] if custom else None,
                  labels={"fy2026_obligations": "FY2026 obligations ($)", label: ""})
     fig.update_traces(marker_color=ACCENT, hovertemplate="%{y}<br>$%{x:,.0f}<extra></extra>")
-    fig.update_layout(height=max(200, 19 * len(d) + 60), margin=dict(l=0, r=10, t=4, b=0),
+    fig.update_layout(height=chart_h(n), margin=dict(l=0, r=10, t=4, b=0),
                       font=dict(size=10), xaxis_title=None, dragmode=False)
     if key:
         ev = st.plotly_chart(fig, use_container_width=True, key=key, on_select="rerun",
@@ -250,7 +255,7 @@ with b:
     if len(m):
         fig = px.bar(m, x="month", y="fy2026_obligations", labels={"fy2026_obligations": "", "month": ""})
         fig.update_traces(marker_color=ACCENT, hovertemplate="%{x}<br>$%{y:,.0f}<extra></extra>")
-        fig.update_layout(height=300, margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
+        fig.update_layout(height=chart_h(15), margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 with c:
     st.markdown("**Award size (net FY2026 obligations)**")
@@ -258,7 +263,7 @@ with c:
     if len(s_):
         fig = px.bar(s_, x="bucket", y="awards", labels={"bucket": "", "awards": "Awards"})
         fig.update_traces(marker_color=ACCENT)
-        fig.update_layout(height=300, margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
+        fig.update_layout(height=chart_h(15), margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 if ss.office:
