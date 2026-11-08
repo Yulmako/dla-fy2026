@@ -82,7 +82,16 @@ def markets() -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def us_companies(market, counting, basis):
-    return Q.country_companies(con, market, counting, "USA", basis)
+    """Distinct companies with actions in the USA (per-state counts cannot be added up)."""
+    col = "recipient_country" if basis == "recipient_location" else "pop_country_code"
+    where, params = [f"{col} = 'USA'"], []
+    if ":" in market:
+        where.append("psc_group = ?")
+        params.append(market.split(":", 1)[1])
+    if counting == "probable_duplicates_removed":
+        where.append("excluded_as_copy = 0")
+    d = Q.q(con, f"SELECT COUNT(DISTINCT company_id) AS n FROM orders_all WHERE {' AND '.join(where)}", params)
+    return int(d["n"].iloc[0])
 
 
 @st.cache_data(show_spinner="Searching …")
