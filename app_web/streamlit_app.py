@@ -164,64 +164,58 @@ def card(title: str, subtitle: str, height: int):
     return c
 
 
-def hbar(df: pd.DataFrame, label, n: int = 10, key: str | None = None, custom: str | None = None,
-         dim=None, title: str | None = None, label_chars: int = 32):
-    """Horizontal bars with the value at the end of each bar; `label` is a column or a
-    function of a row. Returns the clicked row's `custom` value (or None)."""
-    if title:
-        st.markdown(f"**{title}**")
-    if df is None or df.empty:
-        st.caption("—")
-        return None
-    d = df.nlargest(n, "fy2026_obligations").copy()
-    lab = d.apply(label, axis=1) if callable(label) else d[label]
-    d["_full"] = lab.fillna("—").astype(str)
-    # unique labels: plotly stacks bars that share a category name
-    d["_lab"] = [trunc(t, label_chars) + "​" * i for i, t in enumerate(d["_full"])]
-    d["_txt"] = [compact(v) for v in d["fy2026_obligations"]]
-    d["_key"] = d[custom].astype(str) if custom else d["_full"]
-    d = d.iloc[::-1]
-    colors = [ACCENT if not (dim and dim(r)) else "rgba(76,139,245,0.3)" for _, r in d.iterrows()]
-    fig = px.bar(d, x="fy2026_obligations", y="_lab", orientation="h", text="_txt",
-                 custom_data=["_key", "_full"])
-    fig.update_traces(marker_color=colors, textposition="outside", cliponaxis=False,
-                      textfont=dict(size=11, color="rgba(150,150,150,1)"),
-                      hovertemplate="%{customdata[1]}<br>$%{x:,.0f}<extra></extra>")
-    xmax = max(float(d["fy2026_obligations"].max()), 1.0)
-    fig.update_layout(height=ROW_H * len(d) + 8, margin=dict(l=0, r=0, t=0, b=0), bargap=0.32,
-                      font=dict(size=11), dragmode=False, showlegend=False,
-                      xaxis=dict(visible=False, range=[0, xmax * 1.28]),
-                      yaxis=dict(title=None, showgrid=False, ticks="", automargin=True),
-                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-    if key:
-        ev = st.plotly_chart(fig, use_container_width=True, key=key, on_select="rerun",
-                             selection_mode="points", config={"displayModeBar": False})
-        pts = points(ev)
-        if pts:
-            cd = pts[0].get("customdata")
-            return cd[0] if isinstance(cd, (list, tuple)) and cd else None
-        return None
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    return None
+import streamlit.components.v1 as components  # noqa: E402
+
+_barcards = components.declare_component("barcards", path=str(Path(__file__).parent / "barcards"))
 
 
-def vbar(df: pd.DataFrame, x: str, y: str, ticks, fmt, muted=None, height: int = 300):
+def barcards(cards: list[dict], key: str, cols: int = 3, plain: bool = False):
+    """Charts drawn like the Claude dashboard (SVG). Returns the last click {id, key, n} or None."""
+    return _barcards(cards=cards, cols=cols, plain=plain, key=key, default=None)
+
+
+def clicked(ev, card_id: str):
+    """Key of a newly clicked bar of `card_id` (each click is handled once)."""
+    if not ev or ev.get("id") != card_id:
+        return None
+    if st.session_state.get("_clk") == ev.get("n"):
+        return None
+    st.session_state["_clk"] = ev.get("n")
+    return ev.get("key")
+
+
+def hrows(df: pd.DataFrame, label, n: int = 10, key: str | None = None, tip=None, dim=None) -> list[dict]:
     if df is None or df.empty:
-        st.caption("—")
-        return
-    d = df.copy()
-    d["_tick"] = [ticks(r) for _, r in d.iterrows()]
-    colors = [("rgba(128,128,128,0.45)" if muted and muted(r) else ACCENT) for _, r in d.iterrows()]
-    fig = px.bar(d, x="_tick", y=y)
-    fig.update_traces(marker_color=colors, hovertemplate="%{x}<br>%{y:,.0f}<extra></extra>")
-    top = float(d[y].max() or 1)
-    vals = [top * k / 3 for k in range(4)]
-    fig.update_layout(height=height, margin=dict(l=0, r=0, t=6, b=0), bargap=0.25, font=dict(size=11),
-                      dragmode=False, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                      xaxis=dict(title=None, showgrid=False),
-                      yaxis=dict(title=None, tickvals=vals, ticktext=[fmt(v) for v in vals],
-                                 gridcolor="rgba(128,128,128,0.25)", zeroline=False, rangemode="tozero"))
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        return []
+    d = df.nlargest(n, "fy2026_obligations")
+    out = []
+    for _, r in d.iterrows():
+        lab = label(r) if callable(label) else r[label]
+        lab = "—" if lab is None or (isinstance(lab, float) and pd.isna(lab)) else str(lab)
+        if len(lab) > 44:
+            lab = lab[:43] + "…"
+        out.append({"label": lab, "value": fnum(r["fy2026_obligations"]),
+                    "key": None if key is None else str(r[key]),
+                    "tip": tip(r) if tip else [compact(r["fy2026_obligations"])],
+                    "dim": bool(dim(r)) if dim else False})
+    return out
+
+
+def hcard(title, subtitle, rows, cid=None, clickable=False, share=0.56):
+    return {"id": cid or title, "title": title, "subtitle": subtitle, "kind": "h", "rows": rows,
+            "clickable": clickable, "labelShare": share, "fmt": "usd"}
+
+
+def fnum(v) -> float:
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    return 0.0 if pd.isna(v) else v
+
+
+def pct(v, d=1):
+    return "—" if v is None or pd.isna(v) else f"{float(v):.{d}f}%"
 
 
 # ---------------- header & controls ----------------
@@ -294,34 +288,47 @@ tiles([
 # ---------------- overview ----------------
 companies = T("companies", market, counting, "rank")
 code_lab = lambda code, desc: (lambda r: f"{r[code] or ''} {r[desc] or ''}".strip())  # noqa: E731
-H1, H2 = 4 * ROW_H + ROW_H * 11 + 150, ROW_H * 12 + 170
-a, b, c = st.columns(3)
-with a, card("Top 15 companies", "Obligations by company (reported parent UEI); click a bar for the profile.", H1):
-    v = picked("top_chart", hbar(T("companies", market, counting, "rank", 15), "company_name", 15,
-                                 key="top_chart", custom="company_id"))
-    if v is not None and str(v).lstrip("-").isdigit():
-        ss.company = int(v)
-        st.toast("Company profile updated – see below")
-with b, card("Obligations by month", "Grey = month after the normal-reporting date (incomplete, not estimated).", H1):
-    normal = str(stt.get("reporting_normal_through") or "")[:7]
-    vbar(T("monthly", market, counting, "month"), "month", "fy2026_obligations",
-         lambda r: pd.Timestamp(str(r["month"]) + "-01").strftime("%b"), compact,
-         muted=(lambda r: bool(normal) and str(r["month"]) > normal), height=320)
-with c, card("Top product & service codes (PSC)", "Obligations by PSC; hover for the full name.", H1):
-    hbar(T("by_psc", market, counting), code_lab("psc_code", "psc_description"), 10)
-a, b, c = st.columns(3)
-with a, card("Top industries (NAICS)", "Obligations by NAICS.", H2):
-    hbar(T("by_naics", market, counting), code_lab("naics_code", "naics_description"), 10)
-with b, card("DLA contracting offices", "Obligations by the DLA office that awarded the action; click to filter.", H2):
-    sel_off = ss.office
-    v = picked("office", hbar(T("by_office", market, counting), code_lab("office_code", "office_name"), 12,
-                              key="office_chart", custom="office_code",
-                              dim=(lambda r: bool(sel_off) and r["office_code"] != sel_off)))
-    if v:
-        ss.office = None if v == ss.office else v
-with c, card("Award size", "Awards with positive net obligation in the period, by size bucket (count).", H2):
-    vbar(T("award_size", market, counting), "bucket", "awards", lambda r: r["bucket"],
-         lambda v_: f"{v_:,.0f}", height=300)
+sup_tip = lambda r: [f"{compact(r['fy2026_obligations'])} · {pct(r.get('share_of_selected_dataset_pct'))}",  # noqa: E731
+                     f"{int(r.get('supplier_count') or 0):,} suppliers", f"Top supplier: {r.get('top_supplier') or '—'}"]
+normal = str(stt.get("reporting_normal_through") or "")[:7]
+mon = T("monthly", market, counting, "month")
+size = T("award_size", market, counting)
+top15 = T("companies", market, counting, "rank", 15)
+cards = [
+    hcard("Top 15 companies", "Obligations by company (reported parent UEI); click a bar for the profile.",
+          hrows(top15, "company_name", 15, key="company_id",
+                tip=lambda r: [f"Obligations {compact(r['fy2026_obligations'])}", f"Share {pct(r['share_of_selected_dataset_pct'])}",
+                               f"{int(r['award_count']):,} awards · click for profile"]), "top", clickable=True, share=0.52),
+    {"id": "month", "title": "Obligations by month", "kind": "v", "fmt": "usd", "height": 240,
+     "subtitle": "Grey = month after the normal-reporting date (incomplete, not estimated).",
+     "rows": [{"label": pd.Timestamp(str(r["month"]) + "-01").strftime("%b"),
+               "title": pd.Timestamp(str(r["month"]) + "-01").strftime("%b %Y"),
+               "value": fnum(r["fy2026_obligations"]), "muted": bool(normal) and str(r["month"]) > normal,
+               "tip": [compact(r["fy2026_obligations"]), f"{int(fnum(r['actions'])):,} actions"]} for _, r in mon.iterrows()]},
+    hcard("Top product & service codes (PSC)", "Obligations by PSC; hover for suppliers and the top supplier.",
+          hrows(T("by_psc", market, counting), code_lab("psc_code", "psc_description"), 10, tip=sup_tip), "psc"),
+    hcard("Top industries (NAICS)", "Obligations by NAICS.",
+          hrows(T("by_naics", market, counting), code_lab("naics_code", "naics_description"), 10, tip=sup_tip), "naics"),
+    hcard("DLA contracting offices",
+          "Obligations by the DLA office that awarded the action; click an office to filter the order lists.",
+          hrows(T("by_office", market, counting), code_lab("office_code", "office_name"), 12, key="office_code",
+                tip=lambda r: sup_tip(r) + ["click to filter orders by this office"],
+                dim=lambda r: bool(ss.office) and r["office_code"] != ss.office), "office", clickable=True),
+    {"id": "size", "title": "Award size", "kind": "v", "fmt": "int", "height": 240,
+     "subtitle": "Awards with positive net obligation in the period, by size bucket (count).",
+     "rows": [{"label": str(r["bucket"]), "value": fnum(r["awards"]),
+               "tip": [f"{int(r['awards']):,} awards", f"{compact(r['fy2026_obligations'])} obligations"]}
+              for _, r in size.iterrows()]},
+]
+ev = barcards(cards, key="overview")
+v = clicked(ev, "top")
+if v is not None and str(v).lstrip("-").isdigit():
+    ss.company = int(v)
+    st.toast("Company profile updated – see below")
+v = clicked(ev, "office")
+if v:
+    ss.office = None if v == ss.office else v
+    st.rerun()
 
 if ss.office:
     offs_all = T("by_office", market, counting)
@@ -332,14 +339,15 @@ if ss.office:
     if x.button("✕ Clear office", key="clr_office_top"):
         ss.office = None
         st.rerun()
-    a, b = st.columns(2)
     p_ = (ss.office,)
-    with a:
-        hbar(T("office_companies", market, counting, extra="AND office_code = ?", params=p_),
-             "company_name", 10, title="Top companies in this office", label_chars=40)
-    with b:
-        hbar(T("office_psc", market, counting, extra="AND office_code = ?", params=p_),
-             code_lab("psc_code", "psc_description"), 10, title="Top PSC in this office", label_chars=40)
+    share_tip = lambda col, what: (lambda r: [f"{compact(r['fy2026_obligations'])} · {pct(r[col])} of this {what}",  # noqa: E731
+                                              f"{int(fnum(r['actions'])):,} actions"])
+    barcards([hcard("Top companies in this office", "", hrows(T("office_companies", market, counting, extra="AND office_code = ?", params=p_),
+                                                              "company_name", 10, tip=share_tip("share_of_office_pct", "office")), "of_comp", share=0.55),
+              hcard("Top product & service codes in this office", "", hrows(T("office_psc", market, counting, extra="AND office_code = ?", params=p_),
+                                                                           code_lab("psc_code", "psc_description"), 10,
+                                                                           tip=share_tip("share_of_office_pct", "office")), "of_psc", share=0.55)],
+             key="office_panel", cols=2, plain=True)
 
 # ---------------- geography ----------------
 st.markdown("### Geography")
@@ -404,15 +412,16 @@ if ss.loc:
         ex, pp = "AND basis = ? AND country = 'USA' AND substr(location, 1, 2) = ?", (basis, state)
     else:
         ex, pp = "AND basis = ? AND country = ?", (basis, country)
-    a, b = st.columns(2)
-    with a:
-        gc = T("geo_companies", market, counting, extra=ex, params=pp)
-        hbar(gc.groupby("company_name", as_index=False)["fy2026_obligations"].sum(), "company_name", 10, title="Top companies in this location", label_chars=40)
-    with b:
-        gp = T("geo_psc", market, counting, extra=ex, params=pp)
-        if len(gp):
-            hbar(gp.groupby(["psc_code", "psc_description"], as_index=False, dropna=False)["fy2026_obligations"].sum(),
-                 code_lab("psc_code", "psc_description"), 10, title="Top PSC in this location", label_chars=40)
+    gc = T("geo_companies", market, counting, extra=ex, params=pp)
+    gc = gc.groupby("company_name", as_index=False)[["fy2026_obligations", "actions"]].sum()
+    gp = T("geo_psc", market, counting, extra=ex, params=pp)
+    gp = gp.groupby(["psc_code", "psc_description"], as_index=False, dropna=False)[["fy2026_obligations", "actions"]].sum()
+    loc_tip = lambda r: [compact(r["fy2026_obligations"]), f"{int(fnum(r['actions'])):,} actions"]  # noqa: E731
+    barcards([hcard("Top companies in this location", "", hrows(gc, "company_name", 10, tip=loc_tip), "l_comp", share=0.55),
+              hcard("Top product & service codes in this location",
+                    "" if len(gp) else "PSC mix per location is exported for DLA – all contracts.",
+                    hrows(gp, code_lab("psc_code", "psc_description"), 10, tip=loc_tip), "l_psc", share=0.55)],
+             key="loc_panel", cols=2, plain=True)
 
 # ---------------- ranking ----------------
 st.markdown("### Company ranking")
@@ -455,13 +464,13 @@ else:
            ("Rank", f"#{int(row['rank'])}", "", "Rank by obligations in the selected market.")])
     extra, p_ = "AND company_id = ?", (int(cid),)
     co = T("company_offices", market, counting, extra=extra, params=p_)
-    a, b, d = st.columns(3)
-    with a:
-        hbar(co, code_lab("office_code", "office_name"), 10, title="DLA contracting offices")
-    with b:
-        hbar(T("company_psc", market, counting, extra=extra, params=p_), code_lab("psc_code", "psc_description"), 10, title="PSC")
-    with d:
-        hbar(T("company_naics", market, counting, extra=extra, params=p_), code_lab("naics_code", "naics_description"), 10, title="NAICS")
+    ent_tip = lambda r: [compact(r["fy2026_obligations"]), f"{pct(r['share_of_entity_pct'])} of this company"]  # noqa: E731
+    barcards([hcard("DLA contracting offices", "", hrows(co, code_lab("office_code", "office_name"), 10, tip=ent_tip), "p_office", share=0.6),
+              hcard("PSC", "", hrows(T("company_psc", market, counting, extra=extra, params=p_),
+                                     code_lab("psc_code", "psc_description"), 10, tip=ent_tip), "p_psc", share=0.6),
+              hcard("NAICS", "", hrows(T("company_naics", market, counting, extra=extra, params=p_),
+                                       code_lab("naics_code", "naics_description"), 10, tip=ent_tip), "p_naics", share=0.6)],
+             key="profile_charts", cols=3, plain=True)
     if co.empty:
         st.caption("Detailed breakdowns are kept for the largest companies of each market only.")
     rows, tot = search(market, counting, "", int(cid), None, None, "place_of_performance", 25)
