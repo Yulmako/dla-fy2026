@@ -115,10 +115,11 @@ h4 {font-size: 1.05rem !important; padding: 0 0 .2rem !important}
 """
 
 
-def tiles(items):
+def tiles(items, cols: int | None = None):
     html = "".join(f'<div class="tile" title="{tip}"><div class="l">{lab}</div><div class="v">{val}</div>'
                    f'<div class="s">{sub or "&nbsp;"}</div></div>' for lab, val, sub, tip in items)
-    st.markdown(f'<div class="tiles">{html}</div>', unsafe_allow_html=True)
+    style = f' style="grid-template-columns:repeat({cols},minmax(0,1fr))"' if cols else ""
+    st.markdown(f'<div class="tiles"{style}>{html}</div>', unsafe_allow_html=True)
 
 
 def picked(key: str, value):
@@ -481,7 +482,7 @@ st.markdown("### Geography")
 g1, g2, _ = st.columns([2, 2, 4])
 scope = g1.selectbox("Map", ["World", "US states"])
 basis = g2.selectbox("Basis", ["place_of_performance", "recipient_location"],
-                     format_func=lambda b_: "Place of performance" if b_ == "place_of_performance" else "Recipient location")
+                     format_func=lambda b_: "Place of performance" if b_ == "place_of_performance" else "Vendor address")
 geo = T("by_geo", market, counting, extra="AND basis = ?", params=(basis,))
 import numpy as np  # noqa: E402
 
@@ -612,7 +613,7 @@ else:
     tiles([("Obligations", money(row["fy2026_obligations"]), "", "FY2026 obligations to this company in the selected market."),
            ("Share of market", f"{row['share_of_selected_dataset_pct']:.2f}%", "", "Share of the selected market's obligations."),
            ("Awards", f"{int(row['award_count']):,}", "", "Distinct awards with FY2026 activity."),
-           ("Rank", f"#{int(row['rank'])}", "", "Rank by obligations in the selected market.")])
+           ("Rank", f"#{int(row['rank'])}", "", "Rank by obligations in the selected market.")], cols=4)
     extra, p_ = "AND company_id = ?", (int(cid),)
     co = T("company_offices", market, counting, extra=extra, params=p_)
     ent_tip = lambda r: [compact(r["fy2026_obligations"]), f"{pct(r['share_of_entity_pct'])} of this company"]  # noqa: E731
