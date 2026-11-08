@@ -143,7 +143,7 @@ def hbar(df: pd.DataFrame, label: str, title: str, n: int = 15, key: str | None 
         st.caption("No data")
         return None
     d = df.nlargest(n, "fy2026_obligations").iloc[::-1].copy()
-    d[label] = d[label].fillna("—").astype(str).str.slice(0, 48)
+    d[label] = d[label].fillna("—").astype(str).str.slice(0, 32)
     fig = px.bar(d, x="fy2026_obligations", y=label, orientation="h",
                  custom_data=[custom] if custom else None,
                  labels={"fy2026_obligations": "FY2026 obligations ($)", label: ""})
@@ -182,8 +182,37 @@ if ss.get("_market") != (market, counting):
 
 k = Q.kpis(con, market, counting)
 stt = Q.status(con, market, counting)
-if stt.get("period_label") and "partial" in str(stt.get("market_status", "")):
-    st.warning(f"Partial year: {stt['period_label']}")
+
+
+def provisional_note(d: dict) -> str | None:
+    normal, latest = d.get("reporting_normal_through"), d.get("latest_action_date_in_data")
+    if not normal or pd.isna(normal):
+        return None
+    parts = [f"Reporting volume normal through {normal}"]
+    if latest and not pd.isna(latest):
+        parts.append(f"Latest action date in loaded data {latest}")
+    gen = f"Snapshot generated {d.get('generated_at')}" if d.get("generated_at") else ""
+    if gen and d.get("source_last_updated") and not pd.isna(d.get("source_last_updated")):
+        gen += f" (USAspending updated {d['source_last_updated']})"
+    if gen:
+        parts.append(gen)
+    first = (pd.Timestamp(normal) + pd.offsets.MonthBegin(1))
+    end = pd.Timestamp(d.get("period_end") or "2026-09-30")
+    gap = ""
+    if first <= end:
+        a_, b_ = first.strftime("%B"), end.strftime("%B %Y")
+        gap = (f", so {a_ if first.month != end.month else ''}{'–' if first.month != end.month else ''}{b_} "
+               f"{'are' if first.month != end.month else 'is'} largely missing")
+    reload_ = d.get("scheduled_full_reload")
+    text = (" · ".join(parts) + "<br>DoD contract actions reach USAspending about 90 days after they occur"
+            + gap + ". All rankings and shares are provisional; missing obligations are not estimated."
+            + (f" Full reload scheduled {reload_}." if reload_ and not pd.isna(reload_) else ""))
+    return text
+
+
+note = provisional_note(stt)
+if note:
+    st.markdown(f'<div class="src" style="margin-top:.2rem">{note}</div>', unsafe_allow_html=True)
 
 tiles([
     ("Obligations", money(k.get("fy2026_obligations")), "",
@@ -202,29 +231,28 @@ tiles([
 
 # ---------------- overview ----------------
 companies = T("companies", market, counting, "rank")
-a, b = st.columns(2)
+a, b, c = st.columns(3)
 with a:
     hbar(T("companies", market, counting, "rank", 15), "company_name", "Top 15 companies")
 with b:
-    st.markdown("**Obligations by month**")
-    m = T("monthly", market, counting, "month")
-    if len(m):
-        fig = px.bar(m, x="month", y="fy2026_obligations", labels={"fy2026_obligations": "", "month": ""})
-        fig.update_traces(marker_color=ACCENT, hovertemplate="%{x}<br>$%{y:,.0f}<extra></extra>")
-        fig.update_layout(height=345, margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-a, b = st.columns(2)
-with a:
     hbar(T("by_psc", market, counting), "psc_description", "PSC (product / service)")
-with b:
+with c:
     hbar(T("by_naics", market, counting), "naics_description", "NAICS (industry)")
-a, b = st.columns(2)
+a, b, c = st.columns(3)
 with a:
     v = picked("office", hbar(T("by_office", market, counting), "office_name",
                               "DLA contracting offices (click to filter)", key="office_chart", custom="office_code"))
     if v:
         ss.office = v
 with b:
+    st.markdown("**Obligations by month**")
+    m = T("monthly", market, counting, "month")
+    if len(m):
+        fig = px.bar(m, x="month", y="fy2026_obligations", labels={"fy2026_obligations": "", "month": ""})
+        fig.update_traces(marker_color=ACCENT, hovertemplate="%{x}<br>$%{y:,.0f}<extra></extra>")
+        fig.update_layout(height=300, margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+with c:
     st.markdown("**Award size (net FY2026 obligations)**")
     s_ = T("award_size", market, counting)
     if len(s_):
@@ -258,18 +286,35 @@ scope = g1.selectbox("Map", ["World", "US states"])
 basis = g2.selectbox("Basis", ["place_of_performance", "recipient_location"],
                      format_func=lambda b_: "Place of performance" if b_ == "place_of_performance" else "Recipient location")
 geo = T("by_geo", market, counting, extra="AND basis = ?", params=(basis,))
+import numpy as np  # noqa: E402
+
+MAP_SCALE = [[0, "#d6e4fd"], [0.5, "#6fa1f7"], [1, "#1f4fbf"]]
 if scope == "World":
     agg = geo.groupby("country", as_index=False)[["fy2026_obligations", "actions"]].sum().rename(columns={"country": "key"})
-    fig = px.choropleth(agg, locations="key", color="fy2026_obligations", color_continuous_scale="Blues")
+    loc_kw = dict(locations="key")
 else:
     us = geo[geo["country"] == "USA"].copy()
     us["key"] = us["location"].astype(str).str.slice(0, 2)
     agg = us.groupby("key", as_index=False)[["fy2026_obligations", "actions"]].sum()
-    fig = px.choropleth(agg, locations="key", locationmode="USA-states", scope="usa",
-                        color="fy2026_obligations", color_continuous_scale="Blues")
-fig.update_traces(hovertemplate="%{location}<br>$%{z:,.0f}<extra></extra>")
+    loc_kw = dict(locations="key", locationmode="USA-states")
+agg = agg[agg["fy2026_obligations"] > 0]
+# log colour: the US is ~100x larger than any other country, a linear scale hides the rest
+agg["shade"] = np.log10(agg["fy2026_obligations"].clip(lower=1))
+fig = px.choropleth(agg, color="shade", color_continuous_scale=MAP_SCALE,
+                    custom_data=["fy2026_obligations"], **loc_kw)
+fig.update_traces(hovertemplate="%{location}<br>$%{customdata[0]:,.0f}<extra></extra>",
+                  marker_line_color="rgba(128,128,128,0.6)", marker_line_width=0.4)
+geo_kw = dict(bgcolor="rgba(0,0,0,0)", showframe=False, showcoastlines=False,
+              showland=True, landcolor="rgba(128,128,128,0.22)",
+              showcountries=True, countrycolor="rgba(128,128,128,0.6)", countrywidth=0.4,
+              showocean=False, showlakes=False)
+if scope == "World":
+    geo_kw.update(projection_type="natural earth", lataxis_range=[-57, 85], lonaxis_range=[-170, 190])
+else:
+    geo_kw.update(scope="usa", showsubunits=True, subunitcolor="rgba(128,128,128,0.6)", subunitwidth=0.4)
+fig.update_geos(**geo_kw)
 fig.update_layout(height=420, margin=dict(l=0, r=0, t=0, b=0), coloraxis_showscale=False,
-                  geo=dict(bgcolor="rgba(0,0,0,0)", showframe=False, showcoastlines=False))
+                  paper_bgcolor="rgba(0,0,0,0)")
 a, b = st.columns([3, 2])
 with a:
     ev = st.plotly_chart(fig, use_container_width=True, key=f"map_{scope}", on_select="rerun",
