@@ -179,10 +179,11 @@ def hbar(df: pd.DataFrame, label, n: int = 10, key: str | None = None, custom: s
     # unique labels: plotly stacks bars that share a category name
     d["_lab"] = [trunc(t, label_chars) + "​" * i for i, t in enumerate(d["_full"])]
     d["_txt"] = [compact(v) for v in d["fy2026_obligations"]]
+    d["_key"] = d[custom].astype(str) if custom else d["_full"]
     d = d.iloc[::-1]
     colors = [ACCENT if not (dim and dim(r)) else "rgba(76,139,245,0.3)" for _, r in d.iterrows()]
     fig = px.bar(d, x="fy2026_obligations", y="_lab", orientation="h", text="_txt",
-                 custom_data=[custom, "_full"] if custom else ["_full", "_full"])
+                 custom_data=["_key", "_full"])
     fig.update_traces(marker_color=colors, textposition="outside", cliponaxis=False,
                       textfont=dict(size=11, color="rgba(150,150,150,1)"),
                       hovertemplate="%{customdata[1]}<br>$%{x:,.0f}<extra></extra>")
