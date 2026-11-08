@@ -80,6 +80,11 @@ def markets() -> pd.DataFrame:
     return Q.markets(con)
 
 
+@st.cache_data(show_spinner=False)
+def us_companies(market, counting, basis):
+    return Q.country_companies(con, market, counting, "USA", basis)
+
+
 @st.cache_data(show_spinner="Searching …")
 def search(market, counting, text, company_id, office, loc, basis, limit):
     return Q.search_orders(con, market, counting, text, company_id, office, loc, basis, limit)
@@ -501,7 +506,8 @@ if scope == "World":
     usa = geo[geo["country"] == "USA"]
     if len(usa):
         other = pd.concat([other, pd.DataFrame([{"country": "USA", **{c: usa[c].sum() for c in num_cols},
-                                                 "supplier_count": None}])], ignore_index=True)
+                                                 "supplier_count": us_companies(market, counting, basis)}])],
+                          ignore_index=True)
     agg = other.rename(columns={"country": "key"})
     agg["name"] = [GEO_NAMES["world"].get(c, c) for c in agg["key"]]
     loc_kw = dict(locations="key")
@@ -544,7 +550,7 @@ with a:
         ss.loc = ("USA", v) if scope == "US states" else (v, None)
         st.rerun()
     st.caption("Click a country or state to filter. Scroll to zoom. In the world map the United States "
-               "is the sum of all states – switch to US states for state detail.")
+               "is the sum of all states (companies counted once) – switch to US states for state detail.")
 with b:
     tbl = agg.sort_values("fy2026_obligations", ascending=False)[
         ["name", "key", "fy2026_obligations", "share_of_selected_dataset_pct", "companies_txt", "actions"]]
