@@ -164,14 +164,8 @@ def card(title: str, subtitle: str, height: int):
     return c
 
 
-import streamlit.components.v1 as components  # noqa: E402
-
-_barcards = components.declare_component("barcards", path=str(Path(__file__).parent / "barcards"))
-
-
-def barcards(cards: list[dict], key: str, cols: int = 3, plain: bool = False):
-    """Charts drawn like the Claude dashboard (SVG). Returns the last click {id, key, n} or None."""
-    return _barcards(cards=cards, cols=cols, plain=plain, key=key, default=None)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from barcards import barcards  # noqa: E402
 
 
 def clicked(ev, card_id: str):
