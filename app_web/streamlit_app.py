@@ -99,9 +99,7 @@ CSS = """
 [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"] {display:none}
 .block-container {max-width: 1280px; padding-top: 2.2rem; padding-bottom: 3rem}
 h1 {font-size: 1.7rem !important; margin-bottom: 0 !important}
-h3 {font-size: 1.15rem !important; margin-top: 1.4rem !important}
-h4 {font-size: 1.05rem !important; padding: 0 0 .2rem !important}
-.muted {font-size: .82rem; opacity: .7; margin-bottom: .4rem}
+h3 {font-size: 1.05rem !important; margin-top: 1.4rem !important}
 .src {font-size: .85rem; opacity: .75; margin: .2rem 0 1rem}
 .tiles {display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:.6rem; margin:.4rem 0 1rem}
 .tile {border:1px solid rgba(128,128,128,.3); border-radius:8px; padding:.6rem .75rem; cursor:help}
@@ -138,120 +136,30 @@ def points(ev) -> list:
         return []
 
 
-ROW_H = 26  # px per bar row, as in the Claude dashboard
-
-
-def compact(v) -> str:
-    """$4.8B / $928.1M / $612K – like Intl compact with up to 2 decimals."""
-    v = float(v or 0)
-    sign = "-" if v < 0 else ""
-    a = abs(v)
-    for d, s_ in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
-        if a >= d:
-            return f"{sign}${a / d:.2f}".rstrip("0").rstrip(".") + s_
-    return f"{sign}${a:,.0f}"
-
-
-def trunc(t, n: int = 32) -> str:
-    t = "—" if t is None or (isinstance(t, float) and pd.isna(t)) else str(t)
-    return t if len(t) <= n else t[: n - 1] + "…"
-
-
-def card(title: str, subtitle: str, height: int):
-    c = st.container(border=True, height=height)
-    c.markdown(f"#### {title}")
-    c.markdown(f'<div class="muted">{subtitle}</div>', unsafe_allow_html=True)
-    return c
-
-
-import hashlib  # noqa: E402
-import json  # noqa: E402
-import logging  # noqa: E402
-
-import streamlit.components.v1 as components  # noqa: E402
-
-# The chart component is one HTML page, kept inside this file so the app is a single upload.
-BARCARDS_HTML = '<!doctype html>\n<html><head><meta charset="utf-8">\n<style>\n:root{--fg:#fafafa;--muted:rgba(250,250,250,.6);--bg:#0e1117;--panel:#16181d;--line:rgba(128,128,128,.28);--accent:#4C8BF5;--grid:rgba(128,128,128,.22);--grey:rgba(128,128,128,.45)}\nhtml,body{margin:0;padding:0;background:transparent;color:var(--fg);font-family:"Source Sans Pro",system-ui,sans-serif;font-variant-numeric:tabular-nums}\n.grid{display:grid;grid-template-columns:repeat(var(--cols,3),minmax(0,1fr));gap:14px;padding:2px}\n@media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}\n.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;min-width:0}\n.card.plain{background:transparent;border:none;padding:4px 0}\nh2{font-size:18px;font-weight:600;margin:0}\n.card.plain h2{font-size:15px}\n.sub{color:var(--muted);font-size:11.5px;line-height:1.4;margin:0}\n.chart{position:relative}\nsvg{display:block;overflow:visible}\nsvg text{font-size:12px;fill:var(--fg)}\nsvg text.v{fill:var(--muted)}\n.hit{cursor:default}.click .hit{cursor:pointer}\n.tip{position:absolute;pointer-events:none;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;white-space:nowrap;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.25)}\n.tip b{display:block;font-weight:600}\n.empty{color:var(--muted);font-size:13px}\n</style></head>\n<body><div id="root"></div>\n<script>\nconst send = (type, extra) => window.parent.postMessage(Object.assign({isStreamlitMessage: true, type}, extra), "*");\nlet ARGS = null;\nconst NS = "http://www.w3.org/2000/svg";\nconst el = (t, a, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };\nconst usd = (v) => { if (v == null || isNaN(v)) return "—"; const s = v < 0 ? "-$" : "$"; v = Math.abs(v);\n  for (const [d, u] of [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]]) if (v >= d) return s + (+(v / d).toFixed(2)) + u; return s + Math.round(v); };\nconst int = (v) => (v == null || isNaN(v) ? "—" : Math.round(v).toLocaleString("en-US"));\nconst FMT = {usd, int};\nlet ctx = null;\nconst tw = (s) => { if (!ctx) { ctx = document.createElement("canvas").getContext("2d"); } ctx.font = "12px " + getComputedStyle(document.body).fontFamily; return ctx.measureText(s).width; };\nconst fit = (s, max) => { if (tw(s) <= max) return s; let t = s; while (t.length > 4 && tw(t + "…") > max) t = t.slice(0, -1); return t + "…"; };\n\nfunction tip(box, ev, title, lines) {\n  let t = box.querySelector(".tip"); if (!t) { t = document.createElement("div"); t.className = "tip"; box.appendChild(t); }\n  t.innerHTML = ""; const b = document.createElement("b"); b.textContent = title; t.appendChild(b);\n  (lines || []).forEach((l) => { const d = document.createElement("div"); d.textContent = l; t.appendChild(d); });\n  t.hidden = false; const r = box.getBoundingClientRect(); let x = ev.clientX - r.left + 12;\n  if (x + t.offsetWidth > r.width) x = Math.max(0, r.width - t.offsetWidth); t.style.left = x + "px"; t.style.top = (ev.clientY - r.top + 14) + "px";\n}\nconst untip = (box) => { const t = box.querySelector(".tip"); if (t) t.hidden = true; };\nconst click = (card, row) => send("streamlit:setComponentValue", {value: {id: card.id, key: row.key, n: Date.now()}, dataType: "json"});\n\nfunction hbar(box, card) {\n  const rows = card.rows; const fmt = FMT[card.fmt || "usd"];\n  const W = Math.max(240, box.clientWidth), rh = 26, H = rows.length * rh;\n  const svg = el("svg", {width: W, height: H}, box);\n  const vals = rows.map((r) => r.value);\n  const share = card.labelShare || 0.5;\n  const lw = Math.min(Math.ceil(Math.max(...rows.map((r) => tw(r.label)))) + 14, W * share);\n  const vw = Math.max(...vals.map((v) => tw(fmt(v)))) + 10;\n  const max = Math.max(...vals.map((v) => Math.max(0, v)), 1);\n  const span = Math.max(24, W - lw - vw);\n  rows.forEach((r, i) => {\n    const g = el("g", {transform: `translate(0,${i * rh})`}, svg);\n    const t = el("text", {x: lw - 8, y: rh / 2, dy: "0.35em", "text-anchor": "end"}, g); t.textContent = fit(r.label, lw - 12);\n    const w = Math.max(0, Math.max(0, r.value) / max * span);\n    el("rect", {x: lw, y: 5, height: rh - 10, width: w, rx: 3, fill: "var(--accent)", "fill-opacity": r.dim ? 0.3 : 1}, g);\n    const v = el("text", {class: "v", x: lw + w + 5, y: rh / 2, dy: "0.35em"}, g); v.textContent = fmt(r.value);\n    const hit = el("rect", {class: "hit", x: 0, width: W, height: rh, fill: "transparent"}, g);\n    hit.addEventListener("mousemove", (ev) => tip(box, ev, r.label, r.tip || [fmt(r.value)]));\n    hit.addEventListener("mouseleave", () => untip(box));\n    if (card.clickable) hit.addEventListener("click", () => click(card, r));\n  });\n}\n\nfunction nice(max, n) {\n  if (max <= 0) return [0, 1];\n  let step = Math.pow(10, Math.floor(Math.log10(max / n))); const e = max / n / step;\n  if (e >= 7.5) step *= 10; else if (e >= 3.5) step *= 5; else if (e >= 1.5) step *= 2;\n  const out = []; for (let v = 0; v <= max + step * 0.999; v += step) out.push(+v.toPrecision(12)); return out;\n}\nfunction vbar(box, card) {\n  const rows = card.rows; const fmt = FMT[card.fmt || "usd"];\n  const W = Math.max(240, box.clientWidth), H = card.height || 240, m = {t: 8, r: 6, b: 24};\n  const svg = el("svg", {width: W, height: H}, box);\n  const ticks = nice(Math.max(...rows.map((r) => r.value), 0), 4); const top = ticks[ticks.length - 1];\n  m.l = Math.max(...ticks.map((v) => tw(fmt(v)))) + 12;\n  const y = (v) => H - m.b - (Math.max(0, v) / top) * (H - m.b - m.t);\n  ticks.forEach((v) => { el("line", {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--grid)"}, svg);\n    const t = el("text", {class: "v", x: m.l - 6, y: y(v), dy: "0.35em", "text-anchor": "end"}, svg); t.textContent = fmt(v); });\n  const step = (W - m.l - m.r) / rows.length, bw = step * 0.72;\n  const every = Math.max(1, Math.ceil((Math.max(...rows.map((r) => tw(r.label))) + 8) / step));\n  rows.forEach((r, i) => {\n    const x = m.l + i * step + (step - bw) / 2;\n    el("rect", {x, width: bw, y: y(r.value), height: Math.max(0, y(0) - y(r.value)), rx: 3, fill: r.muted ? "var(--grey)" : "var(--accent)"}, svg);\n    if (i % every === 0) { const t = el("text", {class: "v", x: x + bw / 2, y: H - 6, "text-anchor": "middle"}, svg); t.textContent = r.label; }\n    const hit = el("rect", {class: "hit", x: m.l + i * step, width: step, y: m.t, height: H - m.b - m.t, fill: "transparent"}, svg);\n    hit.addEventListener("mousemove", (ev) => tip(box, ev, r.title || r.label, r.tip || [fmt(r.value)]));\n    hit.addEventListener("mouseleave", () => untip(box));\n  });\n}\n\nfunction render() {\n  if (!ARGS) return;\n  const root = document.getElementById("root"); root.innerHTML = "";\n  const grid = document.createElement("div"); grid.className = "grid"; grid.style.setProperty("--cols", ARGS.cols || 3); root.appendChild(grid);\n  (ARGS.cards || []).forEach((c) => {\n    const card = document.createElement("div"); card.className = "card" + (ARGS.plain ? " plain" : "") + (c.clickable ? " click" : "");\n    if (c.title) { const h = document.createElement("h2"); h.textContent = c.title; card.appendChild(h); }\n    if (c.subtitle) { const p = document.createElement("p"); p.className = "sub"; p.textContent = c.subtitle; card.appendChild(p); }\n    const box = document.createElement("div"); box.className = "chart"; card.appendChild(box); grid.appendChild(card);\n    if (!c.rows || !c.rows.length) { box.innerHTML = \'<div class="empty">—</div>\'; return; }\n    (c.kind === "v" ? vbar : hbar)(box, c);\n  });\n  const h = Math.ceil(document.getElementById("root").getBoundingClientRect().height) + 6;\n  if (window.__ARGS) { try { window.frameElement.style.height = h + "px"; } catch (e) {} }\n  else send("streamlit:setFrameHeight", {height: h});\n}\nfunction theme(t) {\n  if (!t) return; const s = document.documentElement.style;\n  if (t.textColor) { s.setProperty("--fg", t.textColor); s.setProperty("--muted", t.textColor + "99"); }\n  if (t.backgroundColor) s.setProperty("--bg", t.backgroundColor);\n  s.setProperty("--panel", "transparent");\n  if (t.font) document.body.style.fontFamily = t.font + ", system-ui, sans-serif";\n}\nwindow.addEventListener("message", (ev) => {\n  const d = ev.data; if (!d || d.type !== "streamlit:render") return;\n  theme(d.theme); ARGS = d.args; ctx = null; render();\n});\nlet lastW = 0;\nnew ResizeObserver(() => { const w = document.body.clientWidth; if (Math.abs(w - lastW) > 2) { lastW = w; render(); } }).observe(document.body);\nif (window.__ARGS) { theme(window.__THEME); ARGS = window.__ARGS; render(); } else { send("streamlit:componentReady", {apiVersion: 1}); }\n</script></body></html>\n'
-
-
-@st.cache_resource
-def _declare_barcards():
-    """Write the page to a temp folder and declare it as a component; None if that fails."""
-    try:
-        d = Path(tempfile.gettempdir()) / ("barcards_" + hashlib.md5(BARCARDS_HTML.encode()).hexdigest()[:10])
-        d.mkdir(exist_ok=True)
-        (d / "index.html").write_text(BARCARDS_HTML, encoding="utf-8")
-        return components.declare_component("barcards", path=str(d))
-    except Exception as e:  # pragma: no cover - depends on the Streamlit version
-        logging.exception("barcards component unavailable")
-        return repr(e)
-
-
-def _static_height(cards: list[dict], cols: int, plain: bool) -> int:
-    h = 0
-    for i in range(0, len(cards), cols):
-        row = cards[i:i + cols]
-        h += max((78 if not plain else 36) + (c.get("height", 240) if c.get("kind") == "v" else 26 * len(c.get("rows") or [1]))
-                 + (17 if c.get("subtitle") else 0) for c in row) + 16
-    return h + 10
-
-
-def barcards(cards: list[dict], key: str, cols: int = 3, plain: bool = False):
-    """Charts drawn like the Claude dashboard. Returns the last click {id, key, n} or None."""
-    comp = _declare_barcards()
-    if callable(comp):
-        try:
-            return comp(cards=cards, cols=cols, plain=plain, key=key, default=None)
-        except Exception:
-            logging.exception("barcards component failed, static fallback")
-    page = BARCARDS_HTML.replace("<body>", "<body><script>window.__ARGS = " + json.dumps(
-        {"cards": cards, "cols": cols, "plain": plain}) + "; window.__THEME = null;</script>", 1)
-    components.html(page, height=_static_height(cards, cols, plain), scrolling=False)
+def hbar(df: pd.DataFrame, label: str, title: str, n: int = 15, key: str | None = None,
+         custom: str | None = None):
+    st.markdown(f"**{title}**")
+    if df.empty:
+        st.caption("No data")
+        return None
+    d = df.nlargest(n, "fy2026_obligations").iloc[::-1].copy()
+    d[label] = d[label].fillna("—").astype(str).str.slice(0, 32)
+    fig = px.bar(d, x="fy2026_obligations", y=label, orientation="h",
+                 custom_data=[custom] if custom else None,
+                 labels={"fy2026_obligations": "FY2026 obligations ($)", label: ""})
+    fig.update_traces(marker_color=ACCENT, hovertemplate="%{y}<br>$%{x:,.0f}<extra></extra>")
+    fig.update_layout(height=max(200, 19 * len(d) + 60), margin=dict(l=0, r=10, t=4, b=0),
+                      font=dict(size=10), xaxis_title=None, dragmode=False)
+    if key:
+        ev = st.plotly_chart(fig, use_container_width=True, key=key, on_select="rerun",
+                             selection_mode="points", config={"displayModeBar": False})
+        pts = points(ev)
+        if pts:
+            cd = pts[0].get("customdata")
+            return cd[0] if isinstance(cd, (list, tuple)) and cd else pts[0].get("y")
+        return None
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     return None
-
-
-def clicked(ev, card_id: str):
-    """Key of a newly clicked bar of `card_id` (each click is handled once)."""
-    if not ev or ev.get("id") != card_id:
-        return None
-    if st.session_state.get("_clk") == ev.get("n"):
-        return None
-    st.session_state["_clk"] = ev.get("n")
-    return ev.get("key")
-
-
-def hrows(df: pd.DataFrame, label, n: int = 10, key: str | None = None, tip=None, dim=None) -> list[dict]:
-    if df is None or df.empty:
-        return []
-    d = df.nlargest(n, "fy2026_obligations")
-    out = []
-    for _, r in d.iterrows():
-        lab = label(r) if callable(label) else r[label]
-        lab = "—" if lab is None or (isinstance(lab, float) and pd.isna(lab)) else str(lab)
-        if len(lab) > 44:
-            lab = lab[:43] + "…"
-        out.append({"label": lab, "value": fnum(r["fy2026_obligations"]),
-                    "key": None if key is None else str(r[key]),
-                    "tip": tip(r) if tip else [compact(r["fy2026_obligations"])],
-                    "dim": bool(dim(r)) if dim else False})
-    return out
-
-
-def hcard(title, subtitle, rows, cid=None, clickable=False, share=0.56):
-    return {"id": cid or title, "title": title, "subtitle": subtitle, "kind": "h", "rows": rows,
-            "clickable": clickable, "labelShare": share, "fmt": "usd"}
-
-
-def fnum(v) -> float:
-    try:
-        v = float(v)
-    except (TypeError, ValueError):
-        return 0.0
-    return 0.0 if pd.isna(v) else v
-
-
-def pct(v, d=1):
-    return "—" if v is None or pd.isna(v) else f"{float(v):.{d}f}%"
 
 
 # ---------------- header & controls ----------------
@@ -323,48 +231,35 @@ tiles([
 
 # ---------------- overview ----------------
 companies = T("companies", market, counting, "rank")
-code_lab = lambda code, desc: (lambda r: f"{r[code] or ''} {r[desc] or ''}".strip())  # noqa: E731
-sup_tip = lambda r: [f"{compact(r['fy2026_obligations'])} · {pct(r.get('share_of_selected_dataset_pct'))}",  # noqa: E731
-                     f"{int(r.get('supplier_count') or 0):,} suppliers", f"Top supplier: {r.get('top_supplier') or '—'}"]
-normal = str(stt.get("reporting_normal_through") or "")[:7]
-mon = T("monthly", market, counting, "month")
-size = T("award_size", market, counting)
-top15 = T("companies", market, counting, "rank", 15)
-cards = [
-    hcard("Top 15 companies", "Obligations by company (reported parent UEI); click a bar for the profile.",
-          hrows(top15, "company_name", 15, key="company_id",
-                tip=lambda r: [f"Obligations {compact(r['fy2026_obligations'])}", f"Share {pct(r['share_of_selected_dataset_pct'])}",
-                               f"{int(r['award_count']):,} awards · click for profile"]), "top", clickable=True, share=0.52),
-    {"id": "month", "title": "Obligations by month", "kind": "v", "fmt": "usd", "height": 240,
-     "subtitle": "Grey = month after the normal-reporting date (incomplete, not estimated).",
-     "rows": [{"label": pd.Timestamp(str(r["month"]) + "-01").strftime("%b"),
-               "title": pd.Timestamp(str(r["month"]) + "-01").strftime("%b %Y"),
-               "value": fnum(r["fy2026_obligations"]), "muted": bool(normal) and str(r["month"]) > normal,
-               "tip": [compact(r["fy2026_obligations"]), f"{int(fnum(r['actions'])):,} actions"]} for _, r in mon.iterrows()]},
-    hcard("Top product & service codes (PSC)", "Obligations by PSC; hover for suppliers and the top supplier.",
-          hrows(T("by_psc", market, counting), code_lab("psc_code", "psc_description"), 10, tip=sup_tip), "psc"),
-    hcard("Top industries (NAICS)", "Obligations by NAICS.",
-          hrows(T("by_naics", market, counting), code_lab("naics_code", "naics_description"), 10, tip=sup_tip), "naics"),
-    hcard("DLA contracting offices",
-          "Obligations by the DLA office that awarded the action; click an office to filter the order lists.",
-          hrows(T("by_office", market, counting), code_lab("office_code", "office_name"), 12, key="office_code",
-                tip=lambda r: sup_tip(r) + ["click to filter orders by this office"],
-                dim=lambda r: bool(ss.office) and r["office_code"] != ss.office), "office", clickable=True),
-    {"id": "size", "title": "Award size", "kind": "v", "fmt": "int", "height": 240,
-     "subtitle": "Awards with positive net obligation in the period, by size bucket (count).",
-     "rows": [{"label": str(r["bucket"]), "value": fnum(r["awards"]),
-               "tip": [f"{int(r['awards']):,} awards", f"{compact(r['fy2026_obligations'])} obligations"]}
-              for _, r in size.iterrows()]},
-]
-ev = barcards(cards, key="overview")
-v = clicked(ev, "top")
-if v is not None and str(v).lstrip("-").isdigit():
-    ss.company = int(v)
-    st.toast("Company profile updated – see below")
-v = clicked(ev, "office")
-if v:
-    ss.office = None if v == ss.office else v
-    st.rerun()
+a, b, c = st.columns(3)
+with a:
+    hbar(T("companies", market, counting, "rank", 15), "company_name", "Top 15 companies")
+with b:
+    hbar(T("by_psc", market, counting), "psc_description", "PSC (product / service)")
+with c:
+    hbar(T("by_naics", market, counting), "naics_description", "NAICS (industry)")
+a, b, c = st.columns(3)
+with a:
+    v = picked("office", hbar(T("by_office", market, counting), "office_name",
+                              "DLA contracting offices (click to filter)", key="office_chart", custom="office_code"))
+    if v:
+        ss.office = v
+with b:
+    st.markdown("**Obligations by month**")
+    m = T("monthly", market, counting, "month")
+    if len(m):
+        fig = px.bar(m, x="month", y="fy2026_obligations", labels={"fy2026_obligations": "", "month": ""})
+        fig.update_traces(marker_color=ACCENT, hovertemplate="%{x}<br>$%{y:,.0f}<extra></extra>")
+        fig.update_layout(height=300, margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+with c:
+    st.markdown("**Award size (net FY2026 obligations)**")
+    s_ = T("award_size", market, counting)
+    if len(s_):
+        fig = px.bar(s_, x="bucket", y="awards", labels={"bucket": "", "awards": "Awards"})
+        fig.update_traces(marker_color=ACCENT)
+        fig.update_layout(height=300, margin=dict(l=0, r=10, t=4, b=0), font=dict(size=10))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 if ss.office:
     offs_all = T("by_office", market, counting)
@@ -375,15 +270,14 @@ if ss.office:
     if x.button("✕ Clear office", key="clr_office_top"):
         ss.office = None
         st.rerun()
+    a, b = st.columns(2)
     p_ = (ss.office,)
-    share_tip = lambda col, what: (lambda r: [f"{compact(r['fy2026_obligations'])} · {pct(r[col])} of this {what}",  # noqa: E731
-                                              f"{int(fnum(r['actions'])):,} actions"])
-    barcards([hcard("Top companies in this office", "", hrows(T("office_companies", market, counting, extra="AND office_code = ?", params=p_),
-                                                              "company_name", 10, tip=share_tip("share_of_office_pct", "office")), "of_comp", share=0.55),
-              hcard("Top product & service codes in this office", "", hrows(T("office_psc", market, counting, extra="AND office_code = ?", params=p_),
-                                                                           code_lab("psc_code", "psc_description"), 10,
-                                                                           tip=share_tip("share_of_office_pct", "office")), "of_psc", share=0.55)],
-             key="office_panel", cols=2, plain=True)
+    with a:
+        hbar(T("office_companies", market, counting, extra="AND office_code = ?", params=p_),
+             "company_name", "Top companies in this office", 10)
+    with b:
+        hbar(T("office_psc", market, counting, extra="AND office_code = ?", params=p_),
+             "psc_description", "PSC in this office", 10)
 
 # ---------------- geography ----------------
 st.markdown("### Geography")
@@ -448,16 +342,16 @@ if ss.loc:
         ex, pp = "AND basis = ? AND country = 'USA' AND substr(location, 1, 2) = ?", (basis, state)
     else:
         ex, pp = "AND basis = ? AND country = ?", (basis, country)
-    gc = T("geo_companies", market, counting, extra=ex, params=pp)
-    gc = gc.groupby("company_name", as_index=False)[["fy2026_obligations", "actions"]].sum()
-    gp = T("geo_psc", market, counting, extra=ex, params=pp)
-    gp = gp.groupby(["psc_code", "psc_description"], as_index=False, dropna=False)[["fy2026_obligations", "actions"]].sum()
-    loc_tip = lambda r: [compact(r["fy2026_obligations"]), f"{int(fnum(r['actions'])):,} actions"]  # noqa: E731
-    barcards([hcard("Top companies in this location", "", hrows(gc, "company_name", 10, tip=loc_tip), "l_comp", share=0.55),
-              hcard("Top product & service codes in this location",
-                    "" if len(gp) else "PSC mix per location is exported for DLA – all contracts.",
-                    hrows(gp, code_lab("psc_code", "psc_description"), 10, tip=loc_tip), "l_psc", share=0.55)],
-             key="loc_panel", cols=2, plain=True)
+    a, b = st.columns(2)
+    with a:
+        gc = T("geo_companies", market, counting, extra=ex, params=pp)
+        hbar(gc.groupby("company_name", as_index=False)["fy2026_obligations"].sum(), "company_name",
+             "Top companies here", 10)
+    with b:
+        gp = T("geo_psc", market, counting, extra=ex, params=pp)
+        if len(gp):
+            hbar(gp.groupby("psc_description", as_index=False)["fy2026_obligations"].sum(),
+                 "psc_description", "PSC here", 10)
 
 # ---------------- ranking ----------------
 st.markdown("### Company ranking")
@@ -500,13 +394,13 @@ else:
            ("Rank", f"#{int(row['rank'])}", "", "Rank by obligations in the selected market.")])
     extra, p_ = "AND company_id = ?", (int(cid),)
     co = T("company_offices", market, counting, extra=extra, params=p_)
-    ent_tip = lambda r: [compact(r["fy2026_obligations"]), f"{pct(r['share_of_entity_pct'])} of this company"]  # noqa: E731
-    barcards([hcard("DLA contracting offices", "", hrows(co, code_lab("office_code", "office_name"), 10, tip=ent_tip), "p_office", share=0.6),
-              hcard("PSC", "", hrows(T("company_psc", market, counting, extra=extra, params=p_),
-                                     code_lab("psc_code", "psc_description"), 10, tip=ent_tip), "p_psc", share=0.6),
-              hcard("NAICS", "", hrows(T("company_naics", market, counting, extra=extra, params=p_),
-                                       code_lab("naics_code", "naics_description"), 10, tip=ent_tip), "p_naics", share=0.6)],
-             key="profile_charts", cols=3, plain=True)
+    a, b, d = st.columns(3)
+    with a:
+        hbar(co, "office_name", "DLA contracting offices", 10)
+    with b:
+        hbar(T("company_psc", market, counting, extra=extra, params=p_), "psc_description", "PSC", 10)
+    with d:
+        hbar(T("company_naics", market, counting, extra=extra, params=p_), "naics_description", "NAICS", 10)
     if co.empty:
         st.caption("Detailed breakdowns are kept for the largest companies of each market only.")
     rows, tot = search(market, counting, "", int(cid), None, None, "place_of_performance", 25)
