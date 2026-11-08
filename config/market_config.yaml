@@ -1,0 +1,269 @@
+# Market definitions for the Federal Competitor Intelligence dashboard.
+#
+# Reporting period is FIXED to FY2026 in code (src/fiscal.py) and cannot be set here.
+#
+# Codes are drawn from the official 2022 NAICS structure (U.S. Census Bureau),
+# the Federal PSC Manual (GSA / Acquisition.gov) and – for NAICS codes still
+# used by agencies – earlier NAICS vintages. Official descriptions and FY2026
+# activity were checked against USAspending by scripts/phase1_api_probe.py
+# (Phase 1 run 2026-11-06: all candidate codes real and active in FY2026 DoD
+# data). `label` is a working label; USAspending's description is authoritative.
+#
+# Defense Electronics status: VALIDATED working market segment (approved
+# 2026-11-06). It is a documented, configurable working definition – NOT an
+# exhaustive definition of the defense electronics industry.
+#
+# Inclusion rule (applied per TRANSACTION, not per award):
+#   transaction is in the market  <=>  (naics_code IN included NAICS
+#                                       OR psc_code IN included PSC)
+#                                      AND awarding agency IN agency_scope
+#   "included" = tiers listed in `included_tiers`. `review` tier codes are
+#   scanned by the probe but never included until promoted.
+# No single NAICS or PSC code is treated as representing the market.
+
+active_market: dla_all
+
+markets:
+  dla_all:
+    name: "DLA – all contracts"
+    status: candidate
+    all_codes: true
+    description: >
+      Every FY2026 prime contract action awarded by the Defense Logistics Agency,
+      whatever its NAICS/PSC: the full DLA vendor landscape.
+    definition_note: >
+      Base market (added 2026-11-07): all DLA (awarding sub-agency) prime
+      contract actions, types A–D, FY2026. The other markets are DLA-only
+      segments of it. Not DoD-wide and not an industry definition.
+    included_tiers: [core, extended]
+    agency_scope:
+      basis: awarding
+      toptier_agencies:
+        - name: "Department of Defense"
+      subtier_agencies:
+        - name: "Defense Logistics Agency"
+      notes: "DLA only (decision 2026-11-07)."
+    keywords: {mode: tag_only, terms: []}
+
+  defense_electronics:
+    name: "Defense Electronics"
+    status: validated
+    validated_on: "2026-11-06"
+    description: >
+      Federal prime contract obligations for military electronic systems and
+      components: radar, sonar, electronic warfare, communications, navigation,
+      guidance, fire-control electronics, night vision, and the electronic
+      components and repair services that support them.
+    definition_note: >
+      Working market segment for this project, validated against FY2026
+      USAspending data. It is not an exhaustive definition of the defense
+      electronics industry: electronics embedded in platform contracts
+      (aircraft, ships, missiles) coded to platform NAICS/PSC, defense
+      electronics bought outside DoD, classified work, subcontracts and
+      engineering/R&D services coded to broad NAICS (541330, 541715) are
+      outside this definition. Since 2026-11-07 the segment covers DLA
+      awards only (codes were validated on DoD-wide data on 2026-11-06).
+    included_tiers: [core, extended]
+    agency_scope:
+      basis: awarding            # awarding | funding
+      toptier_agencies:
+        - name: "Department of Defense"
+      subtier_agencies:          # DLA only (decision 2026-11-07); remove for all of DoD
+        - name: "Defense Logistics Agency"
+      notes: >
+        Awarding sub-agency = Defense Logistics Agency. Defense electronics
+        bought by other DoD components or other departments are out of scope.
+    keywords:
+      mode: tag_only             # tag_only: used to flag records, never to include them
+      terms: [radar, sonar, "electronic warfare", avionics, "night vision",
+              microelectronics, "circuit card", antenna, transceiver, "IFF"]
+    naics_codes:
+      - {code: "334511", tier: core,     label: "Search, detection, navigation, guidance, aeronautical & nautical systems/instruments mfg", rationale: "Radar, sonar, EW, guidance and navigation systems; the central defense-electronics NAICS."}
+      - {code: "334220", tier: core,     label: "Radio, TV broadcasting & wireless communications equipment mfg", rationale: "Tactical radios, SATCOM terminals, datalinks."}
+      - {code: "334290", tier: core,     label: "Other communications equipment mfg", rationale: "Comms and signalling equipment not elsewhere classified."}
+      - {code: "334413", tier: extended, label: "Semiconductor & related device mfg", rationale: "Microelectronics; strongly dual-use, so extended tier."}
+      - {code: "334418", tier: extended, label: "Printed circuit assembly (electronic assembly) mfg", rationale: "Circuit card assemblies for weapon-system electronics."}
+      - {code: "334419", tier: extended, label: "Other electronic component mfg", rationale: "RF/microwave components, modules."}
+      - {code: "334412", tier: extended, label: "Bare printed circuit board mfg", rationale: "Component supply chain; low expected federal volume."}
+      - {code: "334417", tier: extended, label: "Electronic connector mfg", rationale: "Connectors; dual-use component."}
+      - {code: "334515", tier: extended, label: "Instruments for measuring & testing electricity/electrical signals mfg", rationale: "Electronic test equipment / ATE."}
+      - {code: "811210", tier: extended, label: "Electronic & precision equipment repair & maintenance", rationale: "Depot/field repair of electronic systems (2022 NAICS code)."}
+      - {code: "811219", tier: extended, label: "Other electronic & precision equipment repair & maintenance", rationale: "Pre-2022 NAICS vintage of 811210, still used in FY2026 records ($661M in Phase 1 scan). Added 2026-11-06."}
+      - {code: "811213", tier: extended, label: "Communication equipment repair & maintenance", rationale: "Pre-2022 NAICS vintage of 811210, still used in FY2026 records ($99M). Added 2026-11-06."}
+      - {code: "334416", tier: extended, label: "Capacitor, resistor, coil, transformer & other inductor mfg", rationale: "Passive electronic components ($70M). Added 2026-11-06."}
+      - {code: "334519", tier: review,   label: "Other measuring & controlling device mfg", rationale: "Mixed content; scan only (review-only, 2026-11-06)."}
+      - {code: "334210", tier: review,   label: "Telephone apparatus mfg", rationale: "Largely IT/telecom; scan only (review-only, 2026-11-06)."}
+      - {code: "335999", tier: review,   label: "All other misc. electrical equipment & component mfg", rationale: "Broad catch-all; scan only."}
+      - {code: "334111", tier: review,   label: "Electronic computer mfg", rationale: "Rugged/mission computers vs. commodity IT; scan only."}
+      - {code: "541330", tier: review,   label: "Engineering services", rationale: "Very broad; would dominate the market if included. Scan only."}
+      - {code: "541715", tier: review,   label: "R&D in physical, engineering & life sciences (except nanotech/biotech)", rationale: "Very broad R&D; scan only."}
+    psc_codes:
+      # FSC group 58 – Communication, detection & coherent radiation equipment
+      - {code: "5810", tier: core,     label: "Communications security equipment & components", rationale: "COMSEC."}
+      - {code: "5811", tier: core,     label: "Other cryptologic equipment & components", rationale: "Crypto equipment."}
+      - {code: "5820", tier: core,     label: "Radio & TV communication equipment, except airborne", rationale: "Ground/ship radios."}
+      - {code: "5821", tier: core,     label: "Radio & TV communication equipment, airborne", rationale: "Airborne radios."}
+      - {code: "5825", tier: core,     label: "Radio navigation equipment, except airborne", rationale: "Navigation."}
+      - {code: "5826", tier: core,     label: "Radio navigation equipment, airborne", rationale: "Avionics navigation."}
+      - {code: "5840", tier: core,     label: "Radar equipment, except airborne", rationale: "Ground/naval radar."}
+      - {code: "5841", tier: core,     label: "Radar equipment, airborne", rationale: "Airborne radar."}
+      - {code: "5845", tier: core,     label: "Underwater sound equipment", rationale: "Sonar."}
+      - {code: "5850", tier: core,     label: "Visible & invisible light communication equipment", rationale: "Electro-optical comms."}
+      - {code: "5855", tier: core,     label: "Night vision equipment, emitted & reflected radiation", rationale: "Night vision."}
+      - {code: "5860", tier: core,     label: "Stimulated coherent radiation devices, components & accessories", rationale: "Lasers."}
+      - {code: "5865", tier: core,     label: "Electronic countermeasures, counter-countermeasures & quick reaction capability equipment", rationale: "Electronic warfare."}
+      - {code: "5895", tier: core,     label: "Miscellaneous communication equipment", rationale: "Comms n.e.c."}
+      - {code: "5830", tier: review,   label: "Intercommunication & public address systems, except airborne", rationale: "Partly commercial; scan only."}
+      - {code: "5831", tier: review,   label: "Intercommunication & public address systems, airborne", rationale: "Scan only."}
+      # FSC group 12 – Fire control equipment (electronic subsets)
+      - {code: "1220", tier: core,     label: "Fire control computing sights & devices", rationale: "Fire-control electronics."}
+      - {code: "1230", tier: core,     label: "Fire control systems, complete", rationale: "Integrated fire-control systems."}
+      - {code: "1260", tier: core,     label: "Fire control designating & indicating equipment", rationale: "Designators."}
+      - {code: "1265", tier: core,     label: "Fire control transmitting & receiving equipment, except airborne", rationale: "Fire-control RF."}
+      - {code: "1285", tier: core,     label: "Fire control radar equipment, except airborne", rationale: "Fire-control radar."}
+      - {code: "1287", tier: core,     label: "Fire control sonar equipment", rationale: "Fire-control sonar."}
+      - {code: "1290", tier: extended, label: "Miscellaneous fire control equipment", rationale: "Fire-control equipment n.e.c. ($105M). Added 2026-11-06."}
+      - {code: "1240", tier: review,   label: "Optical sighting & ranging equipment", rationale: "Largely optical, not electronic; scan only."}
+      # FSC group 66 – Instruments (navigation / flight electronics)
+      - {code: "6605", tier: core,     label: "Navigational instruments", rationale: "Inertial/GPS navigation."}
+      - {code: "6610", tier: core,     label: "Flight instruments", rationale: "Avionics instruments."}
+      - {code: "6615", tier: core,     label: "Automatic pilot mechanisms & airborne gyro components", rationale: "Flight-control electronics."}
+      - {code: "6625", tier: extended, label: "Electrical & electronic properties measuring & testing instruments", rationale: "Test equipment."}
+      # FSC group 59 – Electrical & electronic equipment components
+      - {code: "5961", tier: extended, label: "Semiconductor devices & associated hardware", rationale: "Dual-use components."}
+      - {code: "5962", tier: extended, label: "Microcircuits, electronic", rationale: "Microelectronics."}
+      - {code: "5963", tier: extended, label: "Electronic modules", rationale: "Modules."}
+      - {code: "5985", tier: extended, label: "Antennas, waveguides & related equipment", rationale: "RF front-end."}
+      - {code: "5996", tier: extended, label: "Amplifiers", rationale: "RF amplifiers."}
+      - {code: "5998", tier: extended, label: "Electrical & electronic assemblies, boards, cards & associated hardware", rationale: "Circuit card assemblies."}
+      - {code: "5999", tier: extended, label: "Miscellaneous electrical & electronic components", rationale: "Components n.e.c."}
+      - {code: "5935", tier: review,   label: "Connectors, electrical", rationale: "High-volume commodity; scan only."}
+      - {code: "5995", tier: review,   label: "Cable, cord & wire assemblies: communication equipment", rationale: "Scan only."}
+      - {code: "5930", tier: review,   label: "Switches", rationale: "Generic electrical; scan only (review-only, 2026-11-06)."}
+      - {code: "5945", tier: review,   label: "Relays & solenoids", rationale: "Generic electrical; scan only (review-only, 2026-11-06)."}
+      - {code: "5965", tier: review,   label: "Headsets, handsets, microphones & speakers", rationale: "Partly commercial; scan only (review-only, 2026-11-06)."}
+      - {code: "5975", tier: review,   label: "Electrical hardware & supplies", rationale: "Generic electrical; scan only (review-only, 2026-11-06)."}
+      # Services – maintenance & repair of electronic equipment
+      - {code: "J058", tier: extended, label: "Maintenance/repair/rebuild of communication, detection & coherent radiation equipment", rationale: "Sustainment of group 58 equipment."}
+      - {code: "J059", tier: extended, label: "Maintenance/repair/rebuild of electrical & electronic equipment components", rationale: "Sustainment of group 59."}
+      - {code: "J012", tier: review,   label: "Maintenance/repair/rebuild of fire control equipment", rationale: "Scan only."}
+      - {code: "J066", tier: review,   label: "Maintenance/repair/rebuild of instruments & laboratory equipment", rationale: "Broad; scan only."}
+    # Codes deliberately kept OUT of this market (decision 2026-11-06). They may
+    # not appear in naics_codes/psc_codes; the loader enforces this.
+    documented_exclusions:
+      - {kind: naics, codes: ["541330", "541715"], reason: "Kept at review tier only: broad engineering/R&D services ($34.7B + $31.6B in scope) would more than double the market with mostly non-electronics work."}
+      - {kind: naics, codes: ["334510", "334512", "334513", "334514", "334516", "334517"], reason: "Medical, HVAC-control, process, metering, laboratory and irradiation instruments – not defense electronics."}
+      - {kind: naics, codes: ["811211", "811212"], reason: "Consumer electronics and computer/office machine repair – belongs to IT services, not this market."}
+      - {kind: psc, codes: ["J010", "J014", "J015", "J016", "J017", "J019"], reason: "Weapons, missile, aircraft and ship maintenance – platform sustainment (candidate for Aerospace Components), not electronics."}
+      - {kind: psc, codes: ["J063", "J065", "J069"], reason: "Alarm/security systems, medical equipment and training-aid maintenance – out of scope."}
+      - {kind: psc, codes: ["6630", "6640", "6650", "6665", "6680", "6685"], reason: "Chemical analysis, laboratory, optical, hazard-detecting and physical-measurement instruments – out of scope."}
+    # Code families the probe scans for active FY2026 codes NOT in this file,
+    # producing a "candidates for review" list. Nothing is added automatically.
+    discovery_prefixes:
+      naics: ["3342", "3344", "3345", "8112"]
+      psc: ["58", "59", "12", "66", "J05", "J01", "J06"]
+
+  # Planned segments – defined later; the loader accepts empty code lists for
+  # non-active markets.
+  aerospace_components:
+    name: "Aerospace Components"
+    status: planned
+    included_tiers: [core, extended]
+    agency_scope: {basis: awarding, toptier_agencies: [{name: "Department of Defense"}]}
+    keywords: {mode: tag_only, terms: []}
+    naics_codes: []
+    psc_codes: []
+  it_services:
+    name: "IT Services"
+    status: planned
+    included_tiers: [core, extended]
+    agency_scope: {basis: awarding, toptier_agencies: []}
+    keywords: {mode: tag_only, terms: []}
+    naics_codes: []
+    psc_codes: []
+  logistics_supply:
+    name: "Logistics & Supply"
+    status: candidate
+    description: >
+      DoD prime contract obligations for supply and distribution of material
+      (industrial/MRO supplies, hardware, tools, clothing and individual
+      equipment, safety and field equipment, packaging) and for logistics
+      services (warehousing, freight arrangement, logistics support).
+    definition_note: >
+      Candidate working segment (added 2026-11-06), pending Phase 1 probe
+      validation. Not an exhaustive definition of the defense logistics
+      industry. Subsistence, fuel, pharmaceuticals and medical supply are
+      scanned at review tier only because their volume would dominate the
+      segment; aircraft/vehicle spare parts belong to other markets.
+    included_tiers: [core, extended]
+    agency_scope:
+      basis: awarding
+      toptier_agencies:
+        - name: "Department of Defense"
+      subtier_agencies:                      # awarding sub-agency filter
+        - name: "Defense Logistics Agency"
+      notes: "Awarding sub-agency = Defense Logistics Agency (decision 2026-11-06). Remove subtier_agencies for all of DoD."
+    keywords:
+      mode: tag_only
+      terms: [logistics, warehouse, distribution, "prime vendor", "tailored logistics", "MRO", "special operational equipment", "kit"]
+    naics_codes:
+      - {code: "423840", tier: core,     label: "Industrial supplies merchant wholesalers", rationale: "MRO / industrial supply distribution."}
+      - {code: "423830", tier: core,     label: "Industrial machinery & equipment merchant wholesalers", rationale: "Equipment distribution."}
+      - {code: "423990", tier: core,     label: "Other miscellaneous durable goods merchant wholesalers", rationale: "Tactical / field equipment distribution."}
+      - {code: "423710", tier: core,     label: "Hardware merchant wholesalers", rationale: "Hardware distribution."}
+      - {code: "423610", tier: core,     label: "Electrical apparatus, wiring supplies merchant wholesalers", rationale: "Electrical supply distribution."}
+      - {code: "493110", tier: core,     label: "General warehousing & storage", rationale: "Warehousing services."}
+      - {code: "488510", tier: core,     label: "Freight transportation arrangement", rationale: "Freight forwarding / 3PL."}
+      - {code: "541614", tier: core,     label: "Process, physical distribution & logistics consulting", rationale: "Logistics services."}
+      - {code: "423120", tier: extended, label: "Motor vehicle supplies & new parts merchant wholesalers", rationale: "Vehicle parts distribution."}
+      - {code: "423860", tier: extended, label: "Transportation equipment & supplies (except motor vehicle) wholesalers", rationale: "Distribution of transport equipment."}
+      - {code: "423910", tier: extended, label: "Sporting & recreational goods merchant wholesalers", rationale: "Field / outdoor equipment distribution."}
+      - {code: "424350", tier: extended, label: "Clothing & clothing accessories merchant wholesalers", rationale: "Clothing & individual equipment distribution."}
+      - {code: "424990", tier: extended, label: "Other miscellaneous nondurable goods merchant wholesalers", rationale: "Nondurable supply distribution."}
+      - {code: "424130", tier: extended, label: "Industrial & personal service paper merchant wholesalers", rationale: "Packaging / paper supply."}
+      - {code: "423390", tier: extended, label: "Other construction material merchant wholesalers", rationale: "Construction supply distribution."}
+      - {code: "423510", tier: extended, label: "Metal service centers & other metal merchant wholesalers", rationale: "Metal stock distribution."}
+      - {code: "493190", tier: extended, label: "Other warehousing & storage", rationale: "Warehousing services."}
+      - {code: "484121", tier: extended, label: "General freight trucking, long-distance, truckload", rationale: "Freight transport."}
+      - {code: "488991", tier: extended, label: "Packing & crating", rationale: "Logistics services."}
+      - {code: "424210", tier: review,   label: "Drugs & druggists' sundries merchant wholesalers", rationale: "Pharmaceutical prime vendor – would dominate; scan only."}
+      - {code: "423450", tier: review,   label: "Medical, dental & hospital equipment wholesalers", rationale: "Medical supply – scan only."}
+      - {code: "424410", tier: review,   label: "General line grocery merchant wholesalers", rationale: "Subsistence prime vendor – scan only."}
+      - {code: "424490", tier: review,   label: "Other grocery & related products wholesalers", rationale: "Subsistence – scan only."}
+      - {code: "424720", tier: review,   label: "Petroleum products wholesalers (except bulk stations)", rationale: "Fuel – scan only."}
+      - {code: "324110", tier: review,   label: "Petroleum refineries", rationale: "Fuel – scan only."}
+      - {code: "423430", tier: review,   label: "Computer & peripheral equipment & software wholesalers", rationale: "IT resale – belongs to IT market; scan only."}
+    psc_codes:
+      - {code: "R706", tier: core,     label: "Support – management: logistics support", rationale: "Logistics support services."}
+      - {code: "S215", tier: core,     label: "Housekeeping – warehousing / storage", rationale: "Warehousing services."}
+    psc_prefixes:
+      - {prefix: "51", tier: core,     label: "Hand tools", rationale: "Tools supply."}
+      - {prefix: "53", tier: core,     label: "Hardware & abrasives", rationale: "Hardware supply (fasteners etc.)."}
+      - {prefix: "84", tier: core,     label: "Clothing, individual equipment & insignia", rationale: "Clothing & individual equipment."}
+      - {prefix: "42", tier: core,     label: "Firefighting, rescue & safety equipment", rationale: "Safety / protective equipment."}
+      - {prefix: "81", tier: core,     label: "Containers, packaging & packing supplies", rationale: "Packaging supply."}
+      - {prefix: "83", tier: core,     label: "Textiles, leather, furs, apparel & shoe findings, tents & flags", rationale: "Field equipment, tents."}
+      - {prefix: "52", tier: extended, label: "Measuring tools", rationale: "Tools supply."}
+      - {prefix: "49", tier: extended, label: "Maintenance & repair shop equipment", rationale: "Shop / MRO equipment."}
+      - {prefix: "39", tier: extended, label: "Materials handling equipment", rationale: "Warehouse equipment."}
+      - {prefix: "61", tier: extended, label: "Electric wire & power distribution equipment", rationale: "Electrical supply (incl. generators)."}
+      - {prefix: "62", tier: extended, label: "Lighting fixtures & lamps", rationale: "Electrical supply."}
+      - {prefix: "47", tier: extended, label: "Pipe, tubing, hose & fittings", rationale: "Industrial supply."}
+      - {prefix: "72", tier: extended, label: "Household & commercial furnishings & appliances", rationale: "Facility supply."}
+      - {prefix: "73", tier: extended, label: "Food preparation & serving equipment", rationale: "Field feeding equipment."}
+      - {prefix: "75", tier: extended, label: "Office supplies & devices", rationale: "Office supply."}
+      - {prefix: "79", tier: extended, label: "Cleaning equipment & supplies", rationale: "Janitorial supply."}
+      - {prefix: "80", tier: extended, label: "Brushes, paints, sealers & adhesives", rationale: "Industrial supply."}
+      - {prefix: "85", tier: extended, label: "Toiletries", rationale: "Personal supply."}
+      - {prefix: "54", tier: extended, label: "Prefabricated structures & scaffolding", rationale: "Field structures."}
+      - {prefix: "99", tier: extended, label: "Miscellaneous", rationale: "Misc. supply."}
+      - {prefix: "V1", tier: extended, label: "Transportation of things (freight)", rationale: "Freight services."}
+      - {prefix: "65", tier: review,   label: "Medical, dental & veterinary equipment & supplies", rationale: "Medical – scan only."}
+      - {prefix: "89", tier: review,   label: "Subsistence", rationale: "Food – scan only."}
+      - {prefix: "91", tier: review,   label: "Fuels, lubricants, oils & waxes", rationale: "Fuel – scan only."}
+      - {prefix: "68", tier: review,   label: "Chemicals & chemical products", rationale: "Scan only."}
+    documented_exclusions:
+      - {kind: naics, codes: ["336411", "336412", "336413", "336414", "336415", "336419"], reason: "Aircraft / missile manufacturing and parts – Aerospace Components market."}
+    discovery_prefixes:
+      naics: ["423", "424", "4931", "4885", "4841", "5416"]
+      psc: ["5", "8", "4", "6", "7", "R7", "S2", "V"]

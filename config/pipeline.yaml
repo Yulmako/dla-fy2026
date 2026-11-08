@@ -1,0 +1,67 @@
+# Pipeline settings (reporting period is fixed to FY2026 in src/fiscal.py and is
+# not configurable here).
+
+reporting_lag:
+  # Only the most recent N fiscal months are evaluated for reporting lag.
+  # Early-year months (e.g. October) are never flagged just for low spending.
+  trailing_months_to_evaluate: 3
+  # A trailing month is compared with the median of the earlier months.
+  # count_ratio  = month transaction count / baseline median count
+  # dollar_ratio = month obligations       / baseline median obligations
+  # count_ratio  <  threshold                 -> likely_missing_reporting
+  # count_ratio >= threshold, dollars below    -> low_obligations_normal_reporting
+  low_ratio_threshold: 0.5
+  # DoD/USACE contract actions are published in FPDS ~90 days after award.
+  dod_reporting_lag_days: 90
+
+refresh:
+  # Full FY2026 reload once the DoD lag has passed for September 2026.
+  scheduled_full_reload: "2027-01-05"
+  banner_text: "PROVISIONAL — DoD REPORTING LAG"
+
+api:
+  delay_seconds: 0.5
+  timeout_seconds: 90
+  max_retries: 4            # for 429/502/503/504 and network errors
+  max_retries_on_500: 1     # HTTP 500 retried once only (deterministic errors exist)
+  max_calls: 400
+
+reconciliation:
+  tolerance_ratio: 0.005    # 0.5 %
+
+transaction_counting:
+  # How to treat records that share award ID, modification, action date and
+  # non-zero amount but have different transaction IDs (Phase 2a profile).
+  #   undecided               -> the fact loader refuses to run
+  #   count_all_flag          -> count every record (matches USAspending totals);
+  #                              flag the groups and show the exposure
+  #   exclude_flagged_copies  -> within a group whose records are identical on every
+  #                              compared field except `ignore_fields`, keep the lowest
+  #                              transaction_number and exclude the others (logged)
+  # Decision 2026-11-07 (Yuliya): remove probable copies.
+  potential_duplicate_treatment: exclude_flagged_copies
+  # Proposed after Phase 2a (2026-11-06): ignore only "snapshot" fields – values
+  # describing the award/recipient as of report time, not the action itself.
+  # Records differing in ANY transaction-level field (description, parent UEI,
+  # county FIPS, PSC, NAICS, offices, amounts …) are never treated as copies.
+  ignore_fields:
+    - contract_transaction_unique_key
+    - transaction_number
+    - last_modified_date
+    - initial_report_date
+    - total_dollars_obligated
+    - base_and_exercised_options_value
+    - current_total_value_of_award
+    - base_and_all_options_value
+    - potential_total_value_of_award
+    - price_evaluation_adjustment_preference_percent_difference
+    - highly_compensated_officer_1_name
+    - highly_compensated_officer_1_amount
+    - highly_compensated_officer_2_name
+    - highly_compensated_officer_2_amount
+    - highly_compensated_officer_3_name
+    - highly_compensated_officer_3_amount
+    - highly_compensated_officer_4_name
+    - highly_compensated_officer_4_amount
+    - highly_compensated_officer_5_name
+    - highly_compensated_officer_5_amount
